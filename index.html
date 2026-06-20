@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>Influencer CRM — BrightChamps</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+    .modal-backdrop { background: rgba(15,23,42,0.5); backdrop-filter: blur(2px); }
+    .fade-in { animation: fade 0.15s ease-out; }
+    @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    @media (max-width: 768px) {
+      .sidebar-mobile { transform: translateX(-100%); transition: transform 0.2s; }
+      .sidebar-mobile.open { transform: translateX(0); }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased">
+  <div id="app"></div>
+
+  <script type="module">
+    // ===============================================================
+    // CONFIG
+    // ===============================================================
+    const SUPABASE_URL = 'https://qlfyxgsegzsonrzwbdxg.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsZnl4Z3NlZ3pzb25yendiZHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5NDM4MDMsImV4cCI6MjA5NzUxOTgwM30.Gs_DPVk3NsHjituTXoUwlsrk8Jho4RNaLK0uMMIPQnU';
+    const ALLOWED_DOMAIN = 'brightchamps.com';
+    const PAGE_SIZE = 25;
+
+    // ===============================================================
+    // SUPABASE INIT
+    // ===============================================================
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ===============================================================
+    // STATE
+    // ===============================================================
+    const state = {
+      session: null,
+      me: null,                      // team_members row
+      filterOptions: null,           // cached from RPC
+      route: 'campaigns',
+      routeParam: null,
+      lists: {
+        campaigns: { items: [], page: 1, total: 0, search: '', filters: {} },
+        profiles:  { items: [], page: 1, total: 0, search: '', filters: {} },
+      },
+    };
+
+    // ===============================================================
+    // HELPERS
+    // ===============================================================
+    const $  = (sel, root = document) => root.querySelector(sel);
+    const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+    const el = (tag, attrs = {}, ...children) => {
+      const n = document.createElement(tag);
+      Object.entries(attrs).forEach(([k, v]) => {
+        if (k === 'class') n.className = v;
+        else if (k === 'html') n.innerHTML = v;
+        else if (k.startsWith('on')) n.addEventListener(k.slice(2).toLowerCase(), v);
+        else if (v !== false && v != null) n.setAttribute(k, v);
+      });
+      children.flat().forEach(c => {
+        if (c == null || c === false) return;
+        n.appendChild(c.nodeType ? c : document.createTextNode(c));
+      });
+      return n;
+    };
+
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+    const fmtDateTime = (d) => d ? new Date(d).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '—';
+    const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    const groupStatusColor = (g) => ({
+      'Scraping':             'bg-slate-100 text-slate-700',
+      'Screening':            'bg-blue-100 text-blue-700',
+      'Negotiation':          'bg-amber-100 text-amber-800',
+      'Integration Planning': 'bg-purple-100 text-purple-700',
+      'Documents':            'bg-indigo-100 text-indigo-700',
+      'Gone Live':            'bg-emerald-100 text-emerald-700',
+      'Post Gone Live':       'bg-emerald-200 text-emerald-900',
+      'Dropped':              'bg-rose-100 text-rose-700',
+    }[g] || 'bg-slate-100 text-slate-700');
+
+    const toast = (msg, type = 'info') => {
+      const colors = { info: 'bg-slate-900', success: 'bg-emerald-600', error: 'bg-rose-600' };
+      const t = el('div', { class: `fixed bottom-6 left-1/2 -translate-x-1/2 ${colors[type]} text-white text-sm px-4 py-2 rounded-lg shadow-lg z-50 fade-in` }, msg);
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    };
+
+    const confirmModal = (msg) => new Promise(res => {
+      const m = renderModal('Confirm', el('div', { class: 'space-y-4' },
+        el('p', { class: 'text-sm text-slate-600' }, msg),
+        el('div', { class: 'flex justify-end gap-2' },
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => { m.close(); res(false); } }, 'Cancel'),
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-slate-900 text-white hover:bg-slate-800', onClick: () => { m.close(); res(true); } }, 'Confirm')
+        )
+      ));
+    });
+
+    // ===============================================================
+    // AUTH
+    // ===============================================================
+    async function signIn() {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          queryParams: { hd: ALLOWED_DOMAIN, prompt: 'select_account' },
+          redirectTo: window.location.origin + window.location.pathname,
+        },
+      });
+      if (error) toast(error.message, 'error');
+    }
+
+    async function signOut() {
+      await supabase.auth.signOut();
+      window.location.reload();
+    }
+
+    async function loadMe() {
+      const { data, error } = await supabase.from('team_members')
+        .select('*').eq('user_id', state.session.user.id).maybeSingle();
+      if (error) { console.error(error); return null; }
+      return data;
+    }
+
+    async function ensureSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return false;
+      // Domain check
+      const email = session.user.email || '';
+      if (!email.toLowerCase().endsWith('@' + ALLOWED_DOMAIN)) {
+        await supabase.auth.signOut();
+        toast(`Access restricted to @${ALLOWED_DOMAIN} accounts`, 'error');
+        return false;
+      }
+      state.session = session;
+      state.me = await loadMe();
+      return true;
+    }
+
+    // ===============================================================
+    // DATA: FILTER OPTIONS (cached)
+    // ===============================================================
+    async function loadFilterOptions() {
+      if (state.filterOptions) return state.filterOptions;
+      const { data, error } = await supabase.rpc('filter_options');
+      if (error) { console.error(error); return null; }
+      state.filterOptions = data;
+      return data;
+    }
+
+    // ===============================================================
+    // DATA: CAMPAIGNS LIST
+    // ===============================================================
+    async function fetchCampaigns() {
+      const L = state.lists.campaigns;
+      const from = (L.page - 1) * PAGE_SIZE;
+      const to   = from + PAGE_SIZE - 1;
+
+      let q = supabase.from('campaigns').select(`
+        id, name, sub_status, group_status, owner_id, next_followup_at, updated_at, created_at,
+        platform:platforms!inner ( id, platform, username, profile:profiles!inner ( id, name ) ),
+        owner:team_members!campaigns_owner_id_fkey ( full_name )
+      `, { count: 'exact' });
+
+      if (L.search) {
+        // Search by campaign name OR profile name OR platform username
+        // PostgREST doesn't support OR across joined tables cleanly; do client-side or split.
+        q = q.or(`name.ilike.%${L.search}%`);
+      }
+      if (L.filters.group_status) q = q.eq('group_status', L.filters.group_status);
+      if (L.filters.sub_status)   q = q.eq('sub_status', L.filters.sub_status);
+      if (L.filters.owner_id)     q = q.eq('owner_id', L.filters.owner_id);
+      if (L.filters.platform)     q = q.eq('platforms.platform', L.filters.platform);
+      if (L.filters.date_from)    q = q.gte('created_at', L.filters.date_from);
+      if (L.filters.date_to)      q = q.lte('created_at', L.filters.date_to + 'T23:59:59');
+
+      q = q.order('updated_at', { ascending: false }).range(from, to);
+
+      const { data, error, count } = await q;
+      if (error) { console.error(error); toast(error.message, 'error'); return; }
+      L.items = data || [];
+      L.total = count || 0;
+    }
+
+    // ===============================================================
+    // DATA: PROFILES LIST
+    // ===============================================================
+    async function fetchProfiles() {
+      const L = state.lists.profiles;
+      const from = (L.page - 1) * PAGE_SIZE;
+      const to   = from + PAGE_SIZE - 1;
+
+      let q = supabase.from('profiles').select(`
+        id, name, email, phone, region, lead_type, created_at,
+        owner:team_members!profiles_created_by_fkey ( full_name ),
+        platforms ( id, platform, username )
+      `, { count: 'exact' });
+
+      if (L.search) q = q.or(`name.ilike.%${L.search}%,email.ilike.%${L.search}%,phone.ilike.%${L.search}%`);
+      if (L.filters.lead_type) q = q.eq('lead_type', L.filters.lead_type);
+      if (L.filters.created_by) q = q.eq('created_by', L.filters.created_by);
+
+      q = q.order('created_at', { ascending: false }).range(from, to);
+
+      const { data, error, count } = await q;
+      if (error) { console.error(error); toast(error.message, 'error'); return; }
+      L.items = data || [];
+      L.total = count || 0;
+    }
+
+    // ===============================================================
+    // MODAL HELPER
+    // ===============================================================
+    function renderModal(title, content) {
+      const backdrop = el('div', { class: 'fixed inset-0 z-40 modal-backdrop flex items-center justify-center p-4 fade-in' });
+      const modal = el('div', { class: 'bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col' },
+        el('div', { class: 'px-5 py-3 border-b border-slate-200 flex items-center justify-between' },
+          el('h3', { class: 'font-semibold text-slate-900' }, title),
+          el('button', { class: 'text-slate-400 hover:text-slate-700 text-xl leading-none', onClick: () => close() }, '×')
+        ),
+        el('div', { class: 'p-5 overflow-y-auto scrollbar-thin' }, content)
+      );
+      backdrop.appendChild(modal);
+      backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+      document.body.appendChild(backdrop);
+      function close() { backdrop.remove(); }
+      return { close, el: modal };
+    }
+
+    // ===============================================================
+    // ADD PROFILE FLOW
+    // ===============================================================
+    function openAddProfileModal() {
+      const form = el('div', { class: 'space-y-3' });
+      const fields = {};
+      const mkField = (label, name, type = 'text', opts = {}) => {
+        const wrap = el('label', { class: 'block' },
+          el('span', { class: 'text-xs font-medium text-slate-600' }, label + (opts.required ? ' *' : '')),
+          fields[name] = el('input', { type, name, placeholder: opts.placeholder || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' })
+        );
+        return wrap;
+      };
+      const mkSelect = (label, name, options, opts = {}) => {
+        const sel = el('select', { name, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' },
+          el('option', { value: '' }, '— Select —'),
+          ...options.map(o => el('option', { value: o }, o))
+        );
+        fields[name] = sel;
+        return el('label', { class: 'block' },
+          el('span', { class: 'text-xs font-medium text-slate-600' }, label + (opts.required ? ' *' : '')),
+          sel
+        );
+      };
+
+      const leadTypeWrap = mkSelect('Lead Type', 'lead_type', ['Phone', 'Email', 'DM'], { required: true });
+      const nameWrap     = mkField('Name', 'name');
+      const emailWrap    = mkField('Email', 'email', 'email');
+      const phoneWrap    = mkField('Phone', 'phone', 'tel');
+      const regionWrap   = mkField('Region', 'region');
+      const langWrap     = mkField('Languages (comma-separated)', 'languages');
+      const hint = el('p', { class: 'text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5' });
+
+      const updateHint = () => {
+        const lt = fields.lead_type.value;
+        if (lt === 'Phone') hint.textContent = 'Phone & Name are required. Phone must be unique system-wide.';
+        else if (lt === 'Email') hint.textContent = 'Email & Name are required. Email must be unique system-wide.';
+        else if (lt === 'DM') hint.textContent = 'Name is required. DM leads dedupe by name + first platform username.';
+        else hint.textContent = '';
+      };
+      fields.lead_type.addEventListener('change', updateHint);
+
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700' }, 'Create Profile');
+      submitBtn.addEventListener('click', async () => {
+        const payload = {
+          lead_type: fields.lead_type.value,
+          name:      fields.name.value.trim(),
+          email:     fields.email.value.trim() || null,
+          phone:     fields.phone.value.trim() || null,
+          region:    fields.region.value.trim() || null,
+          languages: fields.languages.value.trim() ? fields.languages.value.split(',').map(s => s.trim()).filter(Boolean) : null,
+          created_by: state.me.user_id,
+        };
+        if (!payload.lead_type) return toast('Pick a lead type', 'error');
+        if (!payload.name) return toast('Name is required', 'error');
+        if (payload.lead_type === 'Phone' && !payload.phone) return toast('Phone is required for Phone lead', 'error');
+        if (payload.lead_type === 'Email' && !payload.email) return toast('Email is required for Email lead', 'error');
+
+        submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
+        const { data, error } = await supabase.from('profiles').insert(payload).select().single();
+        submitBtn.disabled = false; submitBtn.textContent = 'Create Profile';
+        if (error) return toast(error.message, 'error');
+
+        modal.close();
+        toast('Profile created — add a platform now?', 'success');
+        openAddPlatformModal(data);
+      });
+
+      [leadTypeWrap, hint, nameWrap, emailWrap, phoneWrap, regionWrap, langWrap].forEach(f => form.appendChild(f));
+      form.appendChild(el('div', { class: 'flex justify-end gap-2 pt-2' },
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+        submitBtn
+      ));
+      const modal = renderModal('Add Influencer Profile', form);
+    }
+
+    // ===============================================================
+    // ADD PLATFORM FLOW (and auto-default campaign via DB trigger)
+    // ===============================================================
+    function openAddPlatformModal(profile) {
+      const form = el('div', { class: 'space-y-3' });
+      const fields = {};
+      const mkField = (label, name, type = 'text', opts = {}) => {
+        const inp = el('input', { type, name, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' });
+        fields[name] = inp;
+        return el('label', { class: 'block' },
+          el('span', { class: 'text-xs font-medium text-slate-600' }, label + (opts.required ? ' *' : '')),
+          inp
+        );
+      };
+
+      const platSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' },
+        el('option', { value: '' }, '— Select —'),
+        ...['Instagram','Youtube','Facebook','Tiktok'].map(p => el('option', { value: p }, p))
+      );
+      fields.platform = platSel;
+
+      form.appendChild(el('div', { class: 'text-xs px-2 py-1.5 bg-slate-100 rounded text-slate-700' }, `Profile: ${profile.name} (${profile.lead_type} lead)`));
+      form.appendChild(el('label', { class: 'block' },
+        el('span', { class: 'text-xs font-medium text-slate-600' }, 'Platform *'),
+        platSel
+      ));
+      form.appendChild(mkField('Username *', 'username'));
+      form.appendChild(mkField('Profile Link', 'link', 'url'));
+      form.appendChild(mkField('Genre', 'genre'));
+      form.appendChild(mkField('Avg Views (last 10 collabs)', 'avg_views', 'number'));
+      form.appendChild(mkField('Followers', 'followers', 'number'));
+
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700' }, 'Add Platform');
+      submitBtn.addEventListener('click', async () => {
+        const payload = {
+          profile_id: profile.id,
+          platform:   fields.platform.value,
+          username:   fields.username.value.trim(),
+          link:       fields.link.value.trim() || null,
+          genre:      fields.genre.value.trim() || null,
+          avg_views:  fields.avg_views.value ? parseInt(fields.avg_views.value) : null,
+          followers:  fields.followers.value ? parseInt(fields.followers.value) : null,
+          created_by: state.me.user_id,
+        };
+        if (!payload.platform) return toast('Pick a platform', 'error');
+        if (!payload.username) return toast('Username is required', 'error');
+
+        submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
+        const { error } = await supabase.from('platforms').insert(payload);
+        submitBtn.disabled = false; submitBtn.textContent = 'Add Platform';
+        if (error) return toast(error.message, 'error');
+
+        modal.close();
+        toast('Platform added — default campaign created (Scraping)', 'success');
+        // refresh
+        if (state.route === 'campaigns') { state.lists.campaigns.page = 1; await fetchCampaigns(); render(); }
+        if (state.route === 'profiles')  { state.lists.profiles.page = 1;  await fetchProfiles();  render(); }
+      });
+
+      form.appendChild(el('div', { class: 'flex justify-end gap-2 pt-2' },
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+        submitBtn
+      ));
+      const modal = renderModal('Add Platform', form);
+    }
+
+    // ===============================================================
+    // VIEWS — CAMPAIGNS LIST
+    // ===============================================================
+    function viewCampaigns() {
+      const L = state.lists.campaigns;
+      const fo = state.filterOptions;
+      const totalPages = Math.max(1, Math.ceil(L.total / PAGE_SIZE));
+
+      // Toolbar
+      const searchInp = el('input', { type: 'search', placeholder: 'Search campaign name…', value: L.search,
+        class: 'flex-1 sm:flex-none sm:w-64 px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500',
+        oninput: debounce(e => { L.search = e.target.value; L.page = 1; refresh('campaigns'); }, 350)
+      });
+
+      const groupSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-300 rounded-md',
+        onchange: e => { L.filters.group_status = e.target.value || undefined; L.page = 1; refresh('campaigns'); }
+      },
+        el('option', { value: '' }, 'All group statuses'),
+        ...(fo?.group_statuses || []).map(g => el('option', { value: g, selected: L.filters.group_status === g }, g))
+      );
+
+      const ownerSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-300 rounded-md',
+        onchange: e => { L.filters.owner_id = e.target.value || undefined; L.page = 1; refresh('campaigns'); }
+      },
+        el('option', { value: '' }, 'All owners'),
+        ...(fo?.owners || []).map(o => el('option', { value: o.id, selected: L.filters.owner_id === o.id }, o.name || '—'))
+      );
+
+      const platSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-300 rounded-md',
+        onchange: e => { L.filters.platform = e.target.value || undefined; L.page = 1; refresh('campaigns'); }
+      },
+        el('option', { value: '' }, 'All platforms'),
+        ...(fo?.platforms || []).map(p => el('option', { value: p, selected: L.filters.platform === p }, p))
+      );
+
+      const toolbar = el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' },
+        searchInp, groupSel, ownerSel, platSel,
+        el('div', { class: 'flex-1' }),
+        el('button', { class: 'px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700',
+          onClick: openAddProfileModal }, '+ Add Profile')
+      );
+
+      // Table
+      const rows = L.items.length ? L.items.map(c => el('tr', { class: 'border-b border-slate-100 hover:bg-slate-50 cursor-pointer',
+          onClick: () => { window.location.hash = `#campaigns/${c.id}`; }
+        },
+        el('td', { class: 'px-3 py-2.5 text-sm font-medium text-slate-900' }, c.name),
+        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, c.platform?.profile?.name || '—'),
+        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, `${c.platform?.platform || '—'} · @${c.platform?.username || '—'}`),
+        el('td', { class: 'px-3 py-2.5' },
+          el('span', { class: `badge ${groupStatusColor(c.group_status)}` }, c.group_status)
+        ),
+        el('td', { class: 'px-3 py-2.5 text-xs text-slate-500' }, c.sub_status),
+        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, c.owner?.full_name || '—'),
+        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, c.next_followup_at
+          ? el('span', { class: new Date(c.next_followup_at) < new Date() ? 'text-rose-600 font-medium' : 'text-slate-600' }, fmtDateTime(c.next_followup_at))
+          : '—'),
+        el('td', { class: 'px-3 py-2.5 text-xs text-slate-500' }, fmtDate(c.updated_at)),
+      )) : [el('tr', {}, el('td', { colspan: 8, class: 'px-3 py-12 text-center text-sm text-slate-500' }, 'No campaigns yet. Add a profile + platform to begin.'))];
+
+      const table = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden' },
+        el('div', { class: 'overflow-x-auto scrollbar-thin' },
+          el('table', { class: 'w-full' },
+            el('thead', { class: 'bg-slate-50 border-b border-slate-200' },
+              el('tr', {},
+                ...['Campaign', 'Influencer', 'Platform', 'Group Status', 'Sub Status', 'Owner', 'Next Follow-up', 'Updated']
+                  .map(h => el('th', { class: 'px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500' }, h))
+              )
+            ),
+            el('tbody', {}, ...rows)
+          )
+        )
+      );
+
+      // Pagination
+      const pag = el('div', { class: 'flex items-center justify-between mt-3 text-sm text-slate-600' },
+        el('span', {}, `Showing ${L.items.length} of ${L.total}`),
+        el('div', { class: 'flex gap-1' },
+          el('button', { class: 'px-2 py-1 border border-slate-300 rounded disabled:opacity-50',
+            disabled: L.page <= 1, onClick: () => { L.page--; refresh('campaigns'); } }, 'Prev'),
+          el('span', { class: 'px-3 py-1' }, `Page ${L.page} / ${totalPages}`),
+          el('button', { class: 'px-2 py-1 border border-slate-300 rounded disabled:opacity-50',
+            disabled: L.page >= totalPages, onClick: () => { L.page++; refresh('campaigns'); } }, 'Next')
+        )
+      );
+
+      return el('div', {}, toolbar, table, pag);
+    }
+
+    // ===============================================================
+    // VIEWS — PROFILES LIST
+    // ===============================================================
+    function viewProfiles() {
+      const L = state.lists.profiles;
+      const fo = state.filterOptions;
+      const totalPages = Math.max(1, Math.ceil(L.total / PAGE_SIZE));
+
+      const searchInp = el('input', { type: 'search', placeholder: 'Search name, email, phone…', value: L.search,
+        class: 'flex-1 sm:flex-none sm:w-64 px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500',
+        oninput: debounce(e => { L.search = e.target.value; L.page = 1; refresh('profiles'); }, 350)
+      });
+
+      const ltSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-300 rounded-md',
+        onchange: e => { L.filters.lead_type = e.target.value || undefined; L.page = 1; refresh('profiles'); }
+      },
+        el('option', { value: '' }, 'All lead types'),
+        ...(fo?.lead_types || []).map(t => el('option', { value: t, selected: L.filters.lead_type === t }, t))
+      );
+
+      const ownerSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-300 rounded-md',
+        onchange: e => { L.filters.created_by = e.target.value || undefined; L.page = 1; refresh('profiles'); }
+      },
+        el('option', { value: '' }, 'All owners'),
+        ...(fo?.owners || []).map(o => el('option', { value: o.id, selected: L.filters.created_by === o.id }, o.name || '—'))
+      );
+
+      const toolbar = el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' },
+        searchInp, ltSel, ownerSel,
+        el('div', { class: 'flex-1' }),
+        el('button', { class: 'px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700',
+          onClick: openAddProfileModal }, '+ Add Profile')
+      );
+
+      const rows = L.items.length ? L.items.map(p => el('tr', { class: 'border-b border-slate-100 hover:bg-slate-50' },
+        el('td', { class: 'px-3 py-2.5 text-sm font-medium text-slate-900 cursor-pointer',
+          onClick: () => { window.location.hash = `#profiles/${p.id}`; } }, p.name),
+        el('td', { class: 'px-3 py-2.5 text-sm' },
+          el('span', { class: 'badge bg-slate-100 text-slate-700' }, p.lead_type)
+        ),
+        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, p.email || '—'),
+        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, p.phone || '—'),
+        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, p.region || '—'),
+        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' },
+          (p.platforms || []).length
+            ? (p.platforms || []).map(pl => `${pl.platform}·@${pl.username}`).join(', ')
+            : el('span', { class: 'text-xs text-amber-700' }, 'no platforms')
+        ),
+        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, p.owner?.full_name || '—'),
+        el('td', { class: 'px-3 py-2.5 text-right' },
+          el('button', { class: 'text-xs text-blue-600 hover:underline',
+            onClick: () => openAddPlatformModal(p) }, '+ Platform')
+        ),
+      )) : [el('tr', {}, el('td', { colspan: 8, class: 'px-3 py-12 text-center text-sm text-slate-500' }, 'No profiles yet. Click + Add Profile to begin.'))];
+
+      const table = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden' },
+        el('div', { class: 'overflow-x-auto scrollbar-thin' },
+          el('table', { class: 'w-full' },
+            el('thead', { class: 'bg-slate-50 border-b border-slate-200' },
+              el('tr', {},
+                ...['Name', 'Lead Type', 'Email', 'Phone', 'Region', 'Platforms', 'Owner', '']
+                  .map(h => el('th', { class: 'px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500' }, h))
+              )
+            ),
+            el('tbody', {}, ...rows)
+          )
+        )
+      );
+
+      const pag = el('div', { class: 'flex items-center justify-between mt-3 text-sm text-slate-600' },
+        el('span', {}, `Showing ${L.items.length} of ${L.total}`),
+        el('div', { class: 'flex gap-1' },
+          el('button', { class: 'px-2 py-1 border border-slate-300 rounded disabled:opacity-50',
+            disabled: L.page <= 1, onClick: () => { L.page--; refresh('profiles'); } }, 'Prev'),
+          el('span', { class: 'px-3 py-1' }, `Page ${L.page} / ${totalPages}`),
+          el('button', { class: 'px-2 py-1 border border-slate-300 rounded disabled:opacity-50',
+            disabled: L.page >= totalPages, onClick: () => { L.page++; refresh('profiles'); } }, 'Next')
+        )
+      );
+
+      return el('div', {}, toolbar, table, pag);
+    }
+
+    // ===============================================================
+    // PLACEHOLDER VIEWS (built in next steps)
+    // ===============================================================
+    function viewPlaceholder(title, note) {
+      return el('div', { class: 'bg-white border border-dashed border-slate-300 rounded-lg p-10 text-center' },
+        el('h2', { class: 'text-lg font-semibold text-slate-700 mb-2' }, title),
+        el('p', { class: 'text-sm text-slate-500' }, note)
+      );
+    }
+
+    // ===============================================================
+    // ROUTING + MAIN RENDER
+    // ===============================================================
+    const ROUTES = {
+      campaigns: { label: 'Campaigns', icon: '🎯', view: viewCampaigns, prefetch: fetchCampaigns },
+      profiles:  { label: 'Profiles',  icon: '👤', view: viewProfiles,  prefetch: fetchProfiles },
+      followups: { label: 'Follow-ups', icon: '⏰', view: () => viewPlaceholder('Follow-ups', 'Coming in step 4.') },
+      dashboard: { label: 'Dashboard',  icon: '📊', view: () => viewPlaceholder('Dashboard', 'Coming in step 4.') },
+      reports:   { label: 'Reports',    icon: '📈', view: () => viewPlaceholder('Reports', 'Coming in step 4.'), adminOnly: true },
+      team:      { label: 'Team',       icon: '👥', view: () => viewPlaceholder('Team Management', 'Coming in step 4.'), adminOnly: true },
+    };
+
+    function parseRoute() {
+      const h = (window.location.hash || '#campaigns').slice(1);
+      const [route, param] = h.split('/');
+      state.route = ROUTES[route] ? route : 'campaigns';
+      state.routeParam = param || null;
+    }
+
+    async function refresh(which) {
+      const r = ROUTES[which];
+      if (r?.prefetch) await r.prefetch();
+      render();
+    }
+
+    function render() {
+      const r = ROUTES[state.route];
+      // Detail routes shown as placeholders for now
+      let body;
+      if (state.routeParam && state.route === 'campaigns') {
+        body = viewPlaceholder('Campaign Detail', 'Activity log, status flow, file uploads — coming in step 3.');
+      } else if (state.routeParam && state.route === 'profiles') {
+        body = viewPlaceholder('Profile Detail', 'Profile info, platforms, campaigns history — coming in step 3.');
+      } else {
+        body = r.view();
+      }
+
+      const sidebar = el('aside', { id: 'sidebar', class: 'sidebar-mobile md:translate-x-0 fixed md:static z-30 inset-y-0 left-0 w-64 bg-slate-900 text-slate-100 flex flex-col' },
+        el('div', { class: 'px-5 py-4 border-b border-slate-800 flex items-center justify-between' },
+          el('div', {},
+            el('div', { class: 'text-sm font-bold' }, 'Influencer CRM'),
+            el('div', { class: 'text-[11px] text-slate-400' }, 'BrightChamps')
+          ),
+          el('button', { class: 'md:hidden text-slate-400', onClick: () => $('#sidebar').classList.remove('open') }, '×')
+        ),
+        el('nav', { class: 'flex-1 px-2 py-3 space-y-1' },
+          ...Object.entries(ROUTES)
+            .filter(([k, r]) => !r.adminOnly || state.me?.role === 'admin')
+            .map(([k, r]) => el('a', {
+              href: '#' + k,
+              class: `flex items-center gap-2 px-3 py-2 text-sm rounded-md ${state.route === k ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800/60'}`
+            },
+              el('span', { class: 'text-base' }, r.icon),
+              el('span', {}, r.label)
+            ))
+        ),
+        el('div', { class: 'px-3 py-3 border-t border-slate-800' },
+          el('div', { class: 'text-xs text-slate-400' }, state.me?.full_name || state.session.user.email),
+          el('div', { class: 'text-[10px] text-slate-500 uppercase tracking-wide mb-2' }, state.me?.role || 'user'),
+          el('button', { class: 'w-full text-xs text-slate-300 hover:text-white border border-slate-700 rounded px-2 py-1', onClick: signOut }, 'Sign out')
+        )
+      );
+
+      const header = el('header', { class: 'md:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between' },
+        el('button', { class: 'text-slate-700', onClick: () => $('#sidebar').classList.add('open') }, '☰'),
+        el('div', { class: 'text-sm font-semibold' }, ROUTES[state.route]?.label),
+        el('div', { class: 'w-6' })
+      );
+
+      const main = el('main', { class: 'flex-1 overflow-y-auto scrollbar-thin' },
+        header,
+        el('div', { class: 'p-4 md:p-6 max-w-screen-2xl mx-auto' },
+          el('div', { class: 'hidden md:flex items-center justify-between mb-5' },
+            el('h1', { class: 'text-xl font-semibold text-slate-900' }, ROUTES[state.route]?.label),
+            el('div', { class: 'text-xs text-slate-500' }, state.me?.full_name + ' · ' + (state.me?.role || 'user'))
+          ),
+          body
+        )
+      );
+
+      $('#app').innerHTML = '';
+      $('#app').appendChild(el('div', { class: 'min-h-screen flex' }, sidebar, main));
+    }
+
+    // ===============================================================
+    // INIT
+    // ===============================================================
+    function debounce(fn, ms) {
+      let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+    }
+
+    async function boot() {
+      // First-time OAuth redirect: Supabase sets the session via hash → exchange happens inside getSession()
+      const ok = await ensureSession();
+      if (!ok) return renderLogin();
+
+      if (!state.me) {
+        // team_members row should be auto-created via the auth trigger, but allow a beat
+        await new Promise(r => setTimeout(r, 500));
+        state.me = await loadMe();
+      }
+      if (!state.me) {
+        $('#app').innerHTML = `<div class="min-h-screen flex items-center justify-center text-sm text-slate-600">Your account isn't provisioned yet. Ask an admin to add you to team_members.</div>`;
+        return;
+      }
+
+      await loadFilterOptions();
+      parseRoute();
+      await ROUTES[state.route].prefetch?.();
+      render();
+
+      window.addEventListener('hashchange', async () => {
+        parseRoute();
+        const r = ROUTES[state.route];
+        if (r?.prefetch && !state.routeParam) await r.prefetch();
+        render();
+        // close mobile sidebar on nav
+        $('#sidebar')?.classList.remove('open');
+      });
+    }
+
+    function renderLogin() {
+      $('#app').innerHTML = '';
+      $('#app').appendChild(
+        el('div', { class: 'min-h-screen flex items-center justify-center p-4 bg-slate-50' },
+          el('div', { class: 'bg-white border border-slate-200 rounded-xl shadow-sm p-8 w-full max-w-sm text-center' },
+            el('div', { class: 'text-2xl font-bold text-slate-900 mb-1' }, 'Influencer CRM'),
+            el('div', { class: 'text-sm text-slate-500 mb-6' }, 'BrightChamps'),
+            el('button', {
+              class: 'w-full px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 flex items-center justify-center gap-2',
+              onClick: signIn
+            }, '🔐  Sign in with Google'),
+            el('p', { class: 'text-[11px] text-slate-400 mt-4' }, `Restricted to @${ALLOWED_DOMAIN} accounts`)
+          )
+        )
+      );
+    }
+
+    boot().catch(e => { console.error(e); $('#app').innerHTML = `<pre class="p-6 text-xs text-rose-700">${escape(e.stack || e.message)}</pre>`; });
+  </script>
+</body>
+</html>
