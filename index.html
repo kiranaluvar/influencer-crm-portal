@@ -36,6 +36,10 @@
     const ALLOWED_DOMAIN = 'brightchamps.com';
     const PAGE_SIZE = 25;
 
+    const LANGUAGES = ['Hindi','English','Tamil','Telugu','Kannada','Malayalam','Marathi','Gujarati','Bengali','Punjabi','Urdu'];
+
+    const COUNTRIES = ['Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina','Armenia','Australia','Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Benin','Bhutan','Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cabo Verde','Cambodia','Cameroon','Canada','Central African Republic','Chad','Chile','China','Colombia','Comoros','Congo','Costa Rica','Croatia','Cuba','Cyprus','Czech Republic','Denmark','Djibouti','Dominica','Dominican Republic','DR Congo','Ecuador','Egypt','El Salvador','Equatorial Guinea','Eritrea','Estonia','Eswatini','Ethiopia','Fiji','Finland','France','Gabon','Gambia','Georgia','Germany','Ghana','Greece','Grenada','Guatemala','Guinea','Guinea-Bissau','Guyana','Haiti','Honduras','Hungary','Iceland','India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Ivory Coast','Jamaica','Japan','Jordan','Kazakhstan','Kenya','Kiribati','Kosovo','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon','Lesotho','Liberia','Libya','Liechtenstein','Lithuania','Luxembourg','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Marshall Islands','Mauritania','Mauritius','Mexico','Micronesia','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nauru','Nepal','Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Korea','North Macedonia','Norway','Oman','Pakistan','Palau','Palestine','Panama','Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Romania','Russia','Rwanda','Saint Kitts and Nevis','Saint Lucia','Saint Vincent and the Grenadines','Samoa','San Marino','Sao Tome and Principe','Saudi Arabia','Senegal','Serbia','Seychelles','Sierra Leone','Singapore','Slovakia','Slovenia','Solomon Islands','Somalia','South Africa','South Korea','South Sudan','Spain','Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan','Tanzania','Thailand','Timor-Leste','Togo','Tonga','Trinidad and Tobago','Tunisia','Turkey','Turkmenistan','Tuvalu','Uganda','Ukraine','United Arab Emirates','United Kingdom','United States','Uruguay','Uzbekistan','Vanuatu','Vatican City','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe'];
+
     // ===============================================================
     // SUPABASE INIT
     // ===============================================================
@@ -269,8 +273,28 @@
       const nameWrap     = mkField('Name', 'name');
       const emailWrap    = mkField('Email', 'email', 'email');
       const phoneWrap    = mkField('Phone', 'phone', 'tel');
-      const regionWrap   = mkField('Region', 'region');
-      const langWrap     = mkField('Languages (comma-separated)', 'languages');
+
+      // Region: searchable country dropdown
+      const regionSel = el('select', { name: 'region', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' },
+        el('option', { value: '' }, '— Select country —'),
+        ...COUNTRIES.map(c => el('option', { value: c }, c))
+      );
+      fields.region = regionSel;
+      const regionWrap = el('label', { class: 'block' },
+        el('span', { class: 'text-xs font-medium text-slate-600' }, 'Region'),
+        regionSel
+      );
+
+      // Languages: multi-select checkboxes
+      const langBoxes = LANGUAGES.map(l => {
+        const cb = el('input', { type: 'checkbox', value: l, class: 'rounded border-slate-300 text-blue-600 focus:ring-blue-500' });
+        return el('label', { class: 'inline-flex items-center gap-1 text-xs px-2 py-1 border border-slate-200 rounded bg-slate-50 cursor-pointer hover:bg-slate-100' }, cb, l);
+      });
+      fields.languages = langBoxes;
+      const langWrap = el('div', {},
+        el('span', { class: 'text-xs font-medium text-slate-600 block mb-1' }, 'Languages Known'),
+        el('div', { class: 'flex flex-wrap gap-1.5' }, ...langBoxes)
+      );
       const hint = el('p', { class: 'text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5' });
 
       const updateHint = () => {
@@ -284,13 +308,14 @@
 
       const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700' }, 'Create Profile');
       submitBtn.addEventListener('click', async () => {
+        const checkedLangs = fields.languages.filter(cb => cb.querySelector('input').checked).map(cb => cb.querySelector('input').value);
         const payload = {
           lead_type: fields.lead_type.value,
           name:      fields.name.value.trim(),
           email:     fields.email.value.trim() || null,
           phone:     fields.phone.value.trim() || null,
-          region:    fields.region.value.trim() || null,
-          languages: fields.languages.value.trim() ? fields.languages.value.split(',').map(s => s.trim()).filter(Boolean) : null,
+          region:    fields.region.value || null,
+          languages: checkedLangs.length ? checkedLangs : null,
           created_by: state.me.user_id,
         };
         if (!payload.lead_type) return toast('Pick a lead type', 'error');
