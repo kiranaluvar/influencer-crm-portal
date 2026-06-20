@@ -59,6 +59,7 @@
         campaigns: { items: [], page: 1, total: 0, search: '', filters: {} },
         profiles:  { items: [], page: 1, total: 0, search: '', filters: {} },
       },
+      detail: { campaign: null, profile: null, activities: [], audit: [], loading: false },
     };
 
     // ===============================================================
@@ -641,6 +642,544 @@
     }
 
     // ===============================================================
+    // DETAIL: FETCHERS
+    // ===============================================================
+    async function fetchCampaignDetail(id) {
+      state.detail.loading = true;
+      const { data: c, error } = await supabase.from('campaigns').select(`
+        *, platform:platforms!inner ( *, profile:profiles!inner ( * ) ),
+        owner:team_members!campaigns_owner_id_fkey ( user_id, full_name, email )
+      `).eq('id', id).single();
+      if (error) { toast(error.message, 'error'); state.detail.loading = false; return; }
+
+      const { data: acts } = await supabase.from('campaign_activities').select(`
+        *, user:team_members!campaign_activities_user_id_fkey ( full_name )
+      `).eq('campaign_id', id).order('created_at', { ascending: false });
+
+      const { data: aud } = await supabase.from('campaign_audit').select(`
+        *, user:team_members!campaign_audit_changed_by_fkey ( full_name )
+      `).eq('campaign_id', id).order('changed_at', { ascending: false }).limit(50);
+
+      state.detail.campaign = c;
+      state.detail.activities = acts || [];
+      state.detail.audit = aud || [];
+      state.detail.loading = false;
+    }
+
+    async function fetchProfileDetail(id) {
+      state.detail.loading = true;
+      const { data: p, error } = await supabase.from('profiles').select(`
+        *, owner:team_members!profiles_created_by_fkey ( full_name ),
+        platforms ( *, owner:team_members!platforms_created_by_fkey ( full_name ),
+          campaigns ( id, name, sub_status, group_status, owner_id, updated_at, created_at,
+            owner:team_members!campaigns_owner_id_fkey ( full_name ) )
+        )
+      `).eq('id', id).single();
+      if (error) { toast(error.message, 'error'); state.detail.loading = false; return; }
+      state.detail.profile = p;
+      state.detail.loading = false;
+    }
+
+    // ===============================================================
+    // DETAIL HELPERS — sub_status options, file upload, etc.
+    // ===============================================================
+    function allowedSubStatuses(currentSub) {
+      const map = state.filterOptions?.sub_statuses || [];
+      const cur = map.find(m => m.sub === currentSub);
+      if (!cur) return [];
+      const curGroup = cur.group;
+      // terminal lock: Post Gone Live / Dropped → no changes
+      if (curGroup === 'Post Gone Live' || curGroup === 'Dropped') return [];
+      // Forward sort_order OR any Dropped sub_status
+      return map.filter(m => {
+        const idx = map.indexOf(m);
+        const curIdx = map.indexOf(cur);
+        return m.group === 'Dropped' || idx >= curIdx;
+      });
+    }
+
+    async function uploadCampaignFile(campaignId, kind, file) {
+      const ext = file.name.split('.').pop();
+      const path = `${campaignId}/${kind}-${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from('campaign-files').upload(path, file, { upsert: true });
+      if (error) { toast(error.message, 'error'); return null; }
+      return path; // store the path, sign on view
+    }
+
+    async function signedUrl(path) {
+      if (!path) return null;
+      const { data } = await supabase.storage.from('campaign-files').createSignedUrl(path, 3600);
+      return data?.signedUrl || null;
+    }
+
+    function canEditCampaign(c) {
+      if (!c || !state.me) return false;
+      if (state.me.role === 'admin') return true;
+      if (c.owner_id === state.me.user_id) return true;
+      // TL of owner
+      // We don't have ownership chain client-side; let server RLS reject if not allowed.
+      if (state.me.role === 'tl') return true;
+      return false;
+    }
+
+    // ===============================================================
+    // STATUS CHANGE MODAL
+    // ===============================================================
+    function openStatusChangeModal(c) {
+      const allowed = allowedSubStatuses(c.sub_status);
+      if (!allowed.length) { toast('This campaign is terminal — no further status changes', 'info'); return; }
+
+      const wrap = el('div', { class: 'space-y-3' });
+      const fields = {};
+      const conditionalArea = el('div', { class: 'space-y-2 pt-2 border-t border-slate-200' });
+
+      const subSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+        el('option', { value: '' }, '— Pick new sub-status —'),
+        ...allowed.map(m => el('option', { value: m.sub }, `${m.sub}  (→ ${m.group})`))
+      );
+      fields.sub_status = subSel;
+
+      const fuWrap = el('label', { class: 'block' },
+        el('span', { class: 'text-xs font-medium text-slate-600' }, 'Next Follow-up (date & time) *'),
+        fields.next_followup_at = el('input', { type: 'datetime-local', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' })
+      );
+      const fuNote = el('label', { class: 'block' },
+        el('span', { class: 'text-xs font-medium text-slate-600' }, 'Follow-up note (optional)'),
+        fields.next_followup_note = el('input', { type: 'text', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' })
+      );
+
+      const renderConditional = () => {
+        conditionalArea.innerHTML = '';
+        const target = fields.sub_status.value;
+        if (!target) return;
+
+        const map = state.filterOptions?.sub_statuses || [];
+        const targetGroup = map.find(m => m.sub === target)?.group;
+
+        // Gone Live mandatory block
+        if (target === 'Gone Live') {
+          fields.gone_live_date = el('input', { type: 'date', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.spends_inr     = el('input', { type: 'number', step: '0.01', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.utm_link       = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.utm_medium     = el('input', { type: 'text', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.utm_content    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+            el('option', { value: '' }, '—'),
+            ...(state.filterOptions?.utm_content || []).map(u => el('option', { value: u }, u))
+          );
+          fields.is_recollab    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+            el('option', { value: '' }, '—'),
+            el('option', { value: 'false' }, 'New collab'),
+            el('option', { value: 'true' }, 'Re-collab (RCB)')
+          );
+          fields.rcb_count      = el('input', { type: 'number', disabled: true, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md disabled:bg-slate-100' });
+          fields.is_recollab.addEventListener('change', () => { fields.rcb_count.disabled = fields.is_recollab.value !== 'true'; });
+
+          [
+            ['Gone Live Date *', fields.gone_live_date],
+            ['Spends (₹) *', fields.spends_inr],
+            ['UTM Link *', fields.utm_link],
+            ['UTM Medium', fields.utm_medium],
+            ['UTM Content * (drives auto-task)', fields.utm_content],
+            ['Collab Type *', fields.is_recollab],
+            ['RCB Count (if Re-collab)', fields.rcb_count],
+          ].forEach(([lbl, inp]) => conditionalArea.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, lbl), inp)));
+        }
+
+        // Post Gone Live mandatory block
+        if (target === 'Post Gone Live') {
+          fields.gone_live_link    = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.insights          = el('textarea', { rows: 3, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.google_drive_link = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          [
+            ['Gone Live Link *', fields.gone_live_link],
+            ['Insights *', fields.insights],
+            ['Google Drive Link *', fields.google_drive_link],
+          ].forEach(([lbl, inp]) => conditionalArea.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, lbl), inp)));
+        }
+
+        // Agreement / Invoice file upload
+        if (target === 'agreement done' || target === 'invoice done') {
+          const which = target === 'agreement done' ? 'agreement' : 'invoice';
+          const fileInp = el('input', { type: 'file', accept: 'image/*,application/pdf', class: 'mt-1 w-full text-xs' });
+          fields._file = fileInp;
+          fields._fileKind = which;
+          conditionalArea.appendChild(el('label', { class: 'block' },
+            el('span', { class: 'text-xs font-medium text-slate-600' }, `Upload ${which} file *`),
+            fileInp
+          ));
+        }
+
+        // Follow-up required unless target is terminal
+        if (targetGroup !== 'Dropped' && targetGroup !== 'Post Gone Live') {
+          conditionalArea.appendChild(fuWrap);
+          conditionalArea.appendChild(fuNote);
+        }
+      };
+      fields.sub_status.addEventListener('change', renderConditional);
+
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700' }, 'Save status change');
+      submitBtn.addEventListener('click', async () => {
+        const target = fields.sub_status.value;
+        if (!target) return toast('Pick a sub-status', 'error');
+
+        const payload = { sub_status: target };
+
+        // File upload first if needed
+        if (fields._file && fields._file.files[0]) {
+          submitBtn.disabled = true; submitBtn.textContent = 'Uploading…';
+          const path = await uploadCampaignFile(c.id, fields._fileKind, fields._file.files[0]);
+          if (!path) { submitBtn.disabled = false; submitBtn.textContent = 'Save status change'; return; }
+          payload[`${fields._fileKind}_file_url`] = path;
+        }
+
+        // Gone Live fields
+        if (target === 'Gone Live') {
+          payload.gone_live_date = fields.gone_live_date.value || null;
+          payload.spends_inr     = fields.spends_inr.value ? parseFloat(fields.spends_inr.value) : null;
+          payload.utm_link       = fields.utm_link.value.trim() || null;
+          payload.utm_medium     = fields.utm_medium.value.trim() || null;
+          payload.utm_content    = fields.utm_content.value || null;
+          payload.is_recollab    = fields.is_recollab.value === 'true' ? true : fields.is_recollab.value === 'false' ? false : null;
+          payload.rcb_count      = fields.rcb_count.value ? parseInt(fields.rcb_count.value) : null;
+        }
+        if (target === 'Post Gone Live') {
+          payload.gone_live_link    = fields.gone_live_link.value.trim() || null;
+          payload.insights          = fields.insights.value.trim() || null;
+          payload.google_drive_link = fields.google_drive_link.value.trim() || null;
+        }
+        const map = state.filterOptions?.sub_statuses || [];
+        const targetGroup = map.find(m => m.sub === target)?.group;
+        if (targetGroup !== 'Dropped' && targetGroup !== 'Post Gone Live') {
+          if (!fields.next_followup_at.value) { submitBtn.disabled = false; submitBtn.textContent = 'Save status change'; return toast('Next follow-up date required', 'error'); }
+          payload.next_followup_at   = new Date(fields.next_followup_at.value).toISOString();
+          payload.next_followup_note = fields.next_followup_note.value.trim() || null;
+        }
+
+        submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
+        const { error } = await supabase.from('campaigns').update(payload).eq('id', c.id);
+        if (error) { submitBtn.disabled = false; submitBtn.textContent = 'Save status change'; return toast(error.message, 'error'); }
+
+        // Log stage_change activity
+        await supabase.from('campaign_activities').insert({
+          campaign_id: c.id, user_id: state.me.user_id, activity_type: 'stage_change',
+          note: `${c.sub_status} → ${target}`,
+          metadata: { from: c.sub_status, to: target },
+        });
+
+        modal.close();
+        toast(`Status updated to ${target}`, 'success');
+        await fetchCampaignDetail(c.id);
+        render();
+      });
+
+      wrap.appendChild(el('label', { class: 'block' },
+        el('span', { class: 'text-xs font-medium text-slate-600' }, 'New Sub-status *'),
+        subSel
+      ));
+      wrap.appendChild(conditionalArea);
+      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 border-t border-slate-200' },
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+        submitBtn
+      ));
+
+      const modal = renderModal('Change Status', wrap);
+    }
+
+    // ===============================================================
+    // LOG ACTIVITY MODAL
+    // ===============================================================
+    function openLogActivityModal(c) {
+      const fields = {};
+      const wrap = el('div', { class: 'space-y-3' });
+
+      fields.activity_type = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+        ...['call','whatsapp','email','dm','comment'].map(t => el('option', { value: t }, t))
+      );
+      fields.note = el('textarea', { rows: 3, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md', placeholder: 'What happened?' });
+      fields.next_followup_at = el('input', { type: 'datetime-local', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+
+      const isTerminal = ['Dropped','Post Gone Live'].includes(c.group_status);
+
+      wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, 'Type *'), fields.activity_type));
+      wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, 'Note'), fields.note));
+      if (!isTerminal) {
+        wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, 'Update next follow-up to *'), fields.next_followup_at));
+      }
+
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700' }, 'Log activity');
+      submitBtn.addEventListener('click', async () => {
+        if (!isTerminal && !fields.next_followup_at.value) return toast('Next follow-up required for active campaigns', 'error');
+        submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
+
+        const { error: aErr } = await supabase.from('campaign_activities').insert({
+          campaign_id: c.id, user_id: state.me.user_id, activity_type: fields.activity_type.value, note: fields.note.value.trim() || null
+        });
+        if (aErr) { submitBtn.disabled = false; submitBtn.textContent = 'Log activity'; return toast(aErr.message, 'error'); }
+
+        if (!isTerminal) {
+          const { error: cErr } = await supabase.from('campaigns').update({
+            next_followup_at: new Date(fields.next_followup_at.value).toISOString()
+          }).eq('id', c.id);
+          if (cErr) { return toast(cErr.message, 'error'); }
+        }
+
+        modal.close();
+        toast('Activity logged', 'success');
+        await fetchCampaignDetail(c.id);
+        render();
+      });
+
+      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-2' },
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+        submitBtn
+      ));
+      const modal = renderModal('Log Activity', wrap);
+    }
+
+    // ===============================================================
+    // REASSIGN OWNER
+    // ===============================================================
+    function openReassignModal(c) {
+      const wrap = el('div', { class: 'space-y-3' });
+      const sel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+        ...(state.filterOptions?.owners || []).map(o => el('option', { value: o.id, selected: c.owner_id === o.id }, o.name || '—'))
+      );
+      wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, 'New Owner *'), sel));
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700' }, 'Reassign');
+      submitBtn.addEventListener('click', async () => {
+        submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
+        const { error } = await supabase.from('campaigns').update({ owner_id: sel.value }).eq('id', c.id);
+        if (error) { submitBtn.disabled = false; submitBtn.textContent = 'Reassign'; return toast(error.message, 'error'); }
+        modal.close();
+        toast('Owner reassigned', 'success');
+        await fetchCampaignDetail(c.id);
+        render();
+      });
+      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-2' },
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+        submitBtn
+      ));
+      const modal = renderModal('Reassign Campaign Owner', wrap);
+    }
+
+    // ===============================================================
+    // CAMPAIGN DETAIL VIEW
+    // ===============================================================
+    function viewCampaignDetail() {
+      const c = state.detail.campaign;
+      if (state.detail.loading || !c) return el('div', { class: 'text-center text-sm text-slate-500 py-10' }, 'Loading…');
+
+      const p  = c.platform?.profile;
+      const pl = c.platform;
+      const isTerminal = ['Dropped', 'Post Gone Live'].includes(c.group_status);
+      const canEdit = canEditCampaign(c);
+      const isOverdue = c.next_followup_at && new Date(c.next_followup_at) < new Date() && !isTerminal;
+
+      // Header
+      const header = el('div', { class: 'flex items-start justify-between gap-4 mb-4 flex-wrap' },
+        el('div', {},
+          el('a', { href: '#campaigns', class: 'text-xs text-slate-500 hover:text-blue-600' }, '← Back to campaigns'),
+          el('h1', { class: 'text-xl font-semibold mt-1' }, c.name),
+          el('div', { class: 'flex items-center gap-2 mt-1.5 text-sm text-slate-600' },
+            el('span', { class: `badge ${groupStatusColor(c.group_status)}` }, c.group_status),
+            el('span', { class: 'text-xs text-slate-500' }, c.sub_status)
+          ),
+        ),
+        el('div', { class: 'flex flex-wrap gap-2' },
+          !isTerminal && canEdit ? el('button', { class: 'px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700', onClick: () => openStatusChangeModal(c) }, 'Change Status') : null,
+          !isTerminal && canEdit ? el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-md hover:bg-slate-50', onClick: () => openLogActivityModal(c) }, 'Log Activity') : null,
+          canEdit ? el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-md hover:bg-slate-50', onClick: () => openReassignModal(c) }, 'Reassign') : null,
+        )
+      );
+
+      // Side: profile + platform info
+      const side = el('div', { class: 'space-y-3' },
+        el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
+          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Influencer'),
+          el('div', { class: 'text-sm font-medium' }, el('a', { href: `#profiles/${p.id}`, class: 'hover:underline text-blue-600' }, p.name)),
+          el('div', { class: 'mt-2 space-y-1 text-xs text-slate-600' },
+            p.email ? el('div', {}, '✉ ', el('a', { href: `mailto:${p.email}`, class: 'text-blue-600 hover:underline' }, p.email)) : null,
+            p.phone ? el('div', {}, '📞 ',
+              el('a', { href: `tel:${p.phone}`, class: 'text-blue-600 hover:underline mr-2' }, p.phone),
+              el('a', { href: `sms:${p.phone}`, class: 'text-slate-500 hover:underline mr-2' }, 'SMS'),
+              el('a', { href: `https://wa.me/${p.phone.replace(/\D/g,'')}`, target: '_blank', class: 'text-emerald-600 hover:underline' }, 'WhatsApp')
+            ) : null,
+            p.region ? el('div', {}, '🌍 ', p.region) : null,
+            (p.languages || []).length ? el('div', {}, '🗣 ', p.languages.join(', ')) : null,
+            el('div', {}, 'Lead type: ', el('span', { class: 'badge bg-slate-100 text-slate-700' }, p.lead_type)),
+          )
+        ),
+        el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
+          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Platform'),
+          el('div', { class: 'text-sm font-medium' }, `${pl.platform} · @${pl.username}`),
+          el('div', { class: 'mt-2 space-y-1 text-xs text-slate-600' },
+            pl.link ? el('div', {}, '🔗 ', el('a', { href: pl.link, target: '_blank', class: 'text-blue-600 hover:underline break-all' }, pl.link)) : null,
+            pl.genre ? el('div', {}, 'Genre: ', pl.genre) : null,
+            pl.followers != null ? el('div', {}, 'Followers: ', pl.followers.toLocaleString()) : null,
+            pl.avg_views != null ? el('div', {}, 'Avg views: ', pl.avg_views.toLocaleString()) : null,
+          )
+        ),
+        el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
+          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Follow-up'),
+          c.next_followup_at
+            ? el('div', { class: `text-sm ${isOverdue ? 'text-rose-600 font-semibold' : 'text-slate-700'}` }, fmtDateTime(c.next_followup_at) + (isOverdue ? ' (overdue)' : ''))
+            : el('div', { class: 'text-sm text-slate-400' }, 'None scheduled'),
+          c.next_followup_note ? el('div', { class: 'text-xs text-slate-500 mt-1' }, c.next_followup_note) : null
+        ),
+        el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
+          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Owner'),
+          el('div', { class: 'text-sm' }, c.owner?.full_name || '—'),
+          el('div', { class: 'text-xs text-slate-500 mt-1' }, c.owner?.email || '')
+        ),
+        // Files
+        el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
+          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Documents'),
+          el('div', { class: 'space-y-2 text-sm' },
+            c.agreement_file_url
+              ? el('div', {}, '📎 Agreement: ', el('button', { class: 'text-blue-600 hover:underline', onClick: async () => { const u = await signedUrl(c.agreement_file_url); if (u) window.open(u, '_blank'); } }, 'View'))
+              : el('div', { class: 'text-xs text-slate-400' }, 'No agreement uploaded'),
+            c.invoice_file_url
+              ? el('div', {}, '🧾 Invoice: ', el('button', { class: 'text-blue-600 hover:underline', onClick: async () => { const u = await signedUrl(c.invoice_file_url); if (u) window.open(u, '_blank'); } }, 'View'))
+              : el('div', { class: 'text-xs text-slate-400' }, 'No invoice uploaded')
+          )
+        )
+      );
+
+      // Gone Live block (if filled)
+      const goneLiveBlock = (c.gone_live_date || c.spends_inr) ? el('div', { class: 'bg-white border border-emerald-200 rounded-lg p-4 mb-3' },
+        el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-emerald-700 mb-2' }, 'Gone Live'),
+        el('div', { class: 'grid grid-cols-2 gap-2 text-xs' },
+          el('div', {}, el('span', { class: 'text-slate-500' }, 'Date: '), fmtDate(c.gone_live_date)),
+          el('div', {}, el('span', { class: 'text-slate-500' }, 'Spends: '), c.spends_inr ? `₹${c.spends_inr}` : '—'),
+          el('div', { class: 'col-span-2' }, el('span', { class: 'text-slate-500' }, 'UTM Link: '), c.utm_link ? el('a', { href: c.utm_link, target: '_blank', class: 'text-blue-600 hover:underline break-all' }, c.utm_link) : '—'),
+          el('div', {}, el('span', { class: 'text-slate-500' }, 'UTM Content: '), c.utm_content || '—'),
+          el('div', {}, el('span', { class: 'text-slate-500' }, 'Type: '), c.is_recollab ? `Re-collab (${c.rcb_count || '?'})` : 'New'),
+          c.gone_live_link ? el('div', { class: 'col-span-2' }, el('span', { class: 'text-slate-500' }, 'Gone Live Link: '), el('a', { href: c.gone_live_link, target: '_blank', class: 'text-blue-600 hover:underline break-all' }, c.gone_live_link)) : null,
+          c.google_drive_link ? el('div', { class: 'col-span-2' }, el('span', { class: 'text-slate-500' }, 'Drive: '), el('a', { href: c.google_drive_link, target: '_blank', class: 'text-blue-600 hover:underline break-all' }, c.google_drive_link)) : null,
+          c.insights ? el('div', { class: 'col-span-2' }, el('span', { class: 'text-slate-500' }, 'Insights: '), c.insights) : null,
+        )
+      ) : null;
+
+      // Activity timeline
+      const acts = state.detail.activities;
+      const timeline = el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
+        el('h3', { class: 'text-sm font-semibold mb-3' }, `Activity (${acts.length})`),
+        acts.length
+          ? el('div', { class: 'space-y-3' },
+              ...acts.map(a => el('div', { class: 'flex gap-3 pb-3 border-b border-slate-100 last:border-0' },
+                el('div', { class: 'w-2 h-2 mt-2 rounded-full bg-blue-500 shrink-0' }),
+                el('div', { class: 'flex-1' },
+                  el('div', { class: 'flex justify-between gap-2 flex-wrap text-xs' },
+                    el('span', { class: 'font-medium text-slate-700' }, `${a.activity_type}${a.user?.full_name ? ' · ' + a.user.full_name : ''}`),
+                    el('span', { class: 'text-slate-400' }, fmtDateTime(a.created_at))
+                  ),
+                  a.note ? el('div', { class: 'text-sm text-slate-600 mt-1 whitespace-pre-wrap' }, a.note) : null,
+                  a.metadata ? el('div', { class: 'text-[11px] text-slate-400 mt-1' }, JSON.stringify(a.metadata)) : null
+                )
+              ))
+            )
+          : el('div', { class: 'text-sm text-slate-400 text-center py-6' }, 'No activity yet')
+      );
+
+      // Audit (collapsed)
+      const audit = state.detail.audit;
+      const auditWrap = audit.length ? el('details', { class: 'bg-white border border-slate-200 rounded-lg p-4 mt-3' },
+        el('summary', { class: 'text-sm font-semibold cursor-pointer' }, `Change history (${audit.length})`),
+        el('div', { class: 'mt-3 space-y-2 text-xs' },
+          ...audit.map(a => el('div', { class: 'flex justify-between gap-2 pb-2 border-b border-slate-100 last:border-0' },
+            el('div', {}, el('div', { class: 'text-slate-700' }, JSON.stringify(a.diff)), el('div', { class: 'text-slate-400 text-[10px]' }, a.user?.full_name || '—')),
+            el('div', { class: 'text-slate-400' }, fmtDateTime(a.changed_at))
+          ))
+        )
+      ) : null;
+
+      return el('div', {},
+        header,
+        el('div', { class: 'grid grid-cols-1 lg:grid-cols-3 gap-4' },
+          el('div', { class: 'lg:col-span-2' }, goneLiveBlock, timeline, auditWrap),
+          el('div', {}, side)
+        )
+      );
+    }
+
+    // ===============================================================
+    // PROFILE DETAIL VIEW
+    // ===============================================================
+    function viewProfileDetail() {
+      const p = state.detail.profile;
+      if (state.detail.loading || !p) return el('div', { class: 'text-center text-sm text-slate-500 py-10' }, 'Loading…');
+
+      const header = el('div', { class: 'flex items-start justify-between gap-4 mb-4 flex-wrap' },
+        el('div', {},
+          el('a', { href: '#profiles', class: 'text-xs text-slate-500 hover:text-blue-600' }, '← Back to profiles'),
+          el('h1', { class: 'text-xl font-semibold mt-1' }, p.name),
+          el('div', { class: 'flex items-center gap-2 mt-1.5 text-sm text-slate-600' },
+            el('span', { class: 'badge bg-slate-100 text-slate-700' }, p.lead_type + ' lead'),
+            el('span', { class: 'text-xs text-slate-500' }, 'Created by ' + (p.owner?.full_name || '—'))
+          )
+        ),
+        el('button', { class: 'px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700',
+          onClick: () => openAddPlatformModal(p) }, '+ Add Platform')
+      );
+
+      const contact = el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4 mb-4' },
+        el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Contact'),
+        el('div', { class: 'grid grid-cols-1 md:grid-cols-2 gap-2 text-sm' },
+          el('div', {}, el('span', { class: 'text-slate-500 text-xs' }, 'Email: '),
+            p.email ? el('a', { href: `mailto:${p.email}`, class: 'text-blue-600 hover:underline' }, p.email) : el('span', { class: 'text-slate-400' }, '—')),
+          el('div', {}, el('span', { class: 'text-slate-500 text-xs' }, 'Phone: '),
+            p.phone ? el('span', {},
+              el('a', { href: `tel:${p.phone}`, class: 'text-blue-600 hover:underline mr-2' }, p.phone),
+              el('a', { href: `sms:${p.phone}`, class: 'text-xs text-slate-500 hover:underline mr-1' }, '·SMS'),
+              el('a', { href: `https://wa.me/${p.phone.replace(/\D/g,'')}`, target: '_blank', class: 'text-xs text-emerald-600 hover:underline' }, '·WhatsApp')
+            ) : el('span', { class: 'text-slate-400' }, '—')),
+          el('div', {}, el('span', { class: 'text-slate-500 text-xs' }, 'Region: '), p.region || '—'),
+          el('div', {}, el('span', { class: 'text-slate-500 text-xs' }, 'Languages: '), (p.languages || []).join(', ') || '—'),
+        )
+      );
+
+      const platforms = el('div', { class: 'space-y-4' },
+        ...(p.platforms || []).map(pl => {
+          const camps = (pl.campaigns || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+          return el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden' },
+            el('div', { class: 'px-4 py-3 border-b border-slate-200 flex items-center justify-between' },
+              el('div', {},
+                el('div', { class: 'font-medium text-sm' }, `${pl.platform} · @${pl.username}`),
+                el('div', { class: 'text-xs text-slate-500 mt-0.5' }, [
+                  pl.followers != null ? `${pl.followers.toLocaleString()} followers` : null,
+                  pl.avg_views != null ? `${pl.avg_views.toLocaleString()} avg views` : null,
+                  pl.genre || null,
+                  pl.owner?.full_name ? `Owner: ${pl.owner.full_name}` : null,
+                ].filter(Boolean).join(' · '))
+              ),
+              pl.link ? el('a', { href: pl.link, target: '_blank', class: 'text-xs text-blue-600 hover:underline' }, 'Visit ↗') : null
+            ),
+            el('div', { class: 'divide-y divide-slate-100' },
+              camps.length
+                ? camps.map(c => el('div', { class: 'px-4 py-2.5 hover:bg-slate-50 cursor-pointer flex items-center justify-between gap-3',
+                    onClick: () => { window.location.hash = `#campaigns/${c.id}`; } },
+                    el('div', { class: 'flex items-center gap-2 min-w-0' },
+                      el('span', { class: 'text-sm font-medium truncate' }, c.name),
+                      el('span', { class: `badge ${groupStatusColor(c.group_status)}` }, c.group_status)
+                    ),
+                    el('div', { class: 'text-xs text-slate-500 shrink-0' },
+                      (c.owner?.full_name || '—') + ' · ' + fmtDate(c.updated_at)
+                    )
+                  ))
+                : [el('div', { class: 'px-4 py-3 text-xs text-slate-400' }, 'No campaigns')]
+            )
+          );
+        }),
+        !(p.platforms || []).length ? el('div', { class: 'bg-white border border-dashed border-slate-300 rounded-lg p-8 text-center text-sm text-slate-500' }, 'No platforms yet') : null
+      );
+
+      return el('div', {}, header, contact,
+        el('h2', { class: 'text-sm font-semibold text-slate-700 mb-3' }, 'Platforms & Campaigns'),
+        platforms
+      );
+    }
+
+    // ===============================================================
     // ROUTING + MAIN RENDER
     // ===============================================================
     const ROUTES = {
@@ -667,12 +1206,11 @@
 
     function render() {
       const r = ROUTES[state.route];
-      // Detail routes shown as placeholders for now
       let body;
       if (state.routeParam && state.route === 'campaigns') {
-        body = viewPlaceholder('Campaign Detail', 'Activity log, status flow, file uploads — coming in step 3.');
+        body = viewCampaignDetail();
       } else if (state.routeParam && state.route === 'profiles') {
-        body = viewPlaceholder('Profile Detail', 'Profile info, platforms, campaigns history — coming in step 3.');
+        body = viewProfileDetail();
       } else {
         body = r.view();
       }
@@ -748,15 +1286,25 @@
 
       await loadFilterOptions();
       parseRoute();
-      await ROUTES[state.route].prefetch?.();
+      if (state.routeParam && state.route === 'campaigns') await fetchCampaignDetail(state.routeParam);
+      else if (state.routeParam && state.route === 'profiles') await fetchProfileDetail(state.routeParam);
+      else await ROUTES[state.route].prefetch?.();
       render();
 
       window.addEventListener('hashchange', async () => {
         parseRoute();
-        const r = ROUTES[state.route];
-        if (r?.prefetch && !state.routeParam) await r.prefetch();
+        state.detail = { campaign: null, profile: null, activities: [], audit: [], loading: false };
+        if (state.routeParam && state.route === 'campaigns') {
+          state.detail.loading = true; render();
+          await fetchCampaignDetail(state.routeParam);
+        } else if (state.routeParam && state.route === 'profiles') {
+          state.detail.loading = true; render();
+          await fetchProfileDetail(state.routeParam);
+        } else {
+          const r = ROUTES[state.route];
+          if (r?.prefetch) await r.prefetch();
+        }
         render();
-        // close mobile sidebar on nav
         $('#sidebar')?.classList.remove('open');
       });
     }
