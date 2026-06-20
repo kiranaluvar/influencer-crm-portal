@@ -295,21 +295,41 @@
         el('span', { class: 'text-xs font-medium text-slate-600 block mb-1' }, 'Languages Known'),
         el('div', { class: 'flex flex-wrap gap-1.5' }, ...langBoxes)
       );
-      const hint = el('p', { class: 'text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5' });
 
+      // PLATFORM SECTION (mandatory — source of the lead)
+      const platSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' },
+        el('option', { value: '' }, '— Select —'),
+        ...['Instagram','Youtube','Facebook','Tiktok'].map(p => el('option', { value: p }, p))
+      );
+      fields.platform = platSel;
+      const platWrap = el('label', { class: 'block' },
+        el('span', { class: 'text-xs font-medium text-slate-600' }, 'Platform *'),
+        platSel
+      );
+      const usernameWrap = mkField('Username *', 'username');
+      const linkWrap     = mkField('Profile Link', 'link', 'url');
+      const genreWrap    = mkField('Genre', 'genre');
+      const avgViewsWrap = mkField('Avg Views (last 10 collabs)', 'avg_views', 'number');
+      const followersWrap = mkField('Followers', 'followers', 'number');
+
+      const hint = el('p', { class: 'text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5' });
       const updateHint = () => {
         const lt = fields.lead_type.value;
         if (lt === 'Phone') hint.textContent = 'Phone & Name are required. Phone must be unique system-wide.';
         else if (lt === 'Email') hint.textContent = 'Email & Name are required. Email must be unique system-wide.';
-        else if (lt === 'DM') hint.textContent = 'Name is required. DM leads dedupe by name + first platform username.';
+        else if (lt === 'DM') hint.textContent = 'Name is required. DM leads dedupe by name + platform username.';
         else hint.textContent = '';
       };
       fields.lead_type.addEventListener('change', updateHint);
 
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700' }, 'Create Profile');
+      const sectionHeader = (label) => el('div', { class: 'pt-2 mt-2 border-t border-slate-200' },
+        el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-slate-500' }, label)
+      );
+
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700' }, 'Create Profile + Platform');
       submitBtn.addEventListener('click', async () => {
         const checkedLangs = fields.languages.filter(cb => cb.querySelector('input').checked).map(cb => cb.querySelector('input').value);
-        const payload = {
+        const profilePayload = {
           lead_type: fields.lead_type.value,
           name:      fields.name.value.trim(),
           email:     fields.email.value.trim() || null,
@@ -318,27 +338,58 @@
           languages: checkedLangs.length ? checkedLangs : null,
           created_by: state.me.user_id,
         };
-        if (!payload.lead_type) return toast('Pick a lead type', 'error');
-        if (!payload.name) return toast('Name is required', 'error');
-        if (payload.lead_type === 'Phone' && !payload.phone) return toast('Phone is required for Phone lead', 'error');
-        if (payload.lead_type === 'Email' && !payload.email) return toast('Email is required for Email lead', 'error');
+        const platformPayload = {
+          platform:   fields.platform.value,
+          username:   fields.username.value.trim(),
+          link:       fields.link.value.trim() || null,
+          genre:      fields.genre.value.trim() || null,
+          avg_views:  fields.avg_views.value ? parseInt(fields.avg_views.value) : null,
+          followers:  fields.followers.value ? parseInt(fields.followers.value) : null,
+          created_by: state.me.user_id,
+        };
+
+        // Validation
+        if (!profilePayload.lead_type) return toast('Pick a lead type', 'error');
+        if (!profilePayload.name) return toast('Name is required', 'error');
+        if (profilePayload.lead_type === 'Phone' && !profilePayload.phone) return toast('Phone is required for Phone lead', 'error');
+        if (profilePayload.lead_type === 'Email' && !profilePayload.email) return toast('Email is required for Email lead', 'error');
+        if (!platformPayload.platform) return toast('Platform is required (source of the lead)', 'error');
+        if (!platformPayload.username) return toast('Platform username is required', 'error');
 
         submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
-        const { data, error } = await supabase.from('profiles').insert(payload).select().single();
-        submitBtn.disabled = false; submitBtn.textContent = 'Create Profile';
-        if (error) return toast(error.message, 'error');
+
+        // 1. Insert profile
+        const { data: prof, error: pErr } = await supabase.from('profiles').insert(profilePayload).select().single();
+        if (pErr) {
+          submitBtn.disabled = false; submitBtn.textContent = 'Create Profile + Platform';
+          return toast(pErr.message, 'error');
+        }
+
+        // 2. Insert platform; rollback profile if it fails
+        platformPayload.profile_id = prof.id;
+        const { error: plErr } = await supabase.from('platforms').insert(platformPayload);
+        if (plErr) {
+          await supabase.from('profiles').delete().eq('id', prof.id);
+          submitBtn.disabled = false; submitBtn.textContent = 'Create Profile + Platform';
+          return toast('Platform failed: ' + plErr.message + ' (profile rolled back)', 'error');
+        }
 
         modal.close();
-        toast('Profile created — add a platform now?', 'success');
-        openAddPlatformModal(data);
+        toast('Profile + platform created — default campaign in Scraping', 'success');
+        if (state.route === 'campaigns') { state.lists.campaigns.page = 1; await fetchCampaigns(); render(); }
+        if (state.route === 'profiles')  { state.lists.profiles.page = 1;  await fetchProfiles();  render(); }
       });
 
-      [leadTypeWrap, hint, nameWrap, emailWrap, phoneWrap, regionWrap, langWrap].forEach(f => form.appendChild(f));
-      form.appendChild(el('div', { class: 'flex justify-end gap-2 pt-2' },
+      [leadTypeWrap, hint, nameWrap, emailWrap, phoneWrap, regionWrap, langWrap,
+       sectionHeader('Source Platform (how you found them)'),
+       platWrap, usernameWrap, linkWrap, genreWrap, avgViewsWrap, followersWrap
+      ].forEach(f => form.appendChild(f));
+
+      form.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-slate-200' },
         el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
         submitBtn
       ));
-      const modal = renderModal('Add Influencer Profile', form);
+      const modal = renderModal('Add Influencer Profile + Platform', form);
     }
 
     // ===============================================================
