@@ -886,53 +886,215 @@
     }
 
     // ===============================================================
-    // LOG ACTIVITY MODAL
+    // LOG ACTIVITY MODAL (with optional stage change)
+    // Stage shown via optgroup; sub-stage values listed inside.
     // ===============================================================
     function openLogActivityModal(c) {
       const fields = {};
       const wrap = el('div', { class: 'space-y-3' });
+      const isTerminalNow = ['Dropped','Post Gone Live'].includes(c.group_status);
 
+      // --- Activity section ---
       fields.activity_type = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
         ...['call','whatsapp','email','dm','comment'].map(t => el('option', { value: t }, t))
       );
       fields.note = el('textarea', { rows: 3, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md', placeholder: 'What happened?' });
-      fields.next_followup_at = el('input', { type: 'datetime-local', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
 
-      const isTerminal = ['Dropped','Post Gone Live'].includes(c.group_status);
-
+      wrap.appendChild(el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-slate-500' }, 'Activity'));
       wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, 'Type *'), fields.activity_type));
       wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, 'Note'), fields.note));
-      if (!isTerminal) {
-        wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, 'Update next follow-up to *'), fields.next_followup_at));
+
+      // --- Stage section ---
+      wrap.appendChild(el('div', { class: 'pt-3 mt-3 border-t border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-500' }, 'Stage'));
+      wrap.appendChild(el('div', { class: 'text-xs text-slate-600' },
+        'Current: ', el('span', { class: `badge ${groupStatusColor(c.group_status)}` }, c.group_status), ' · ',
+        el('span', { class: 'text-slate-500' }, c.sub_status)
+      ));
+
+      if (isTerminalNow) {
+        wrap.appendChild(el('p', { class: 'text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5' },
+          'This campaign is terminal — stage can no longer change. You can still log a comment.'
+        ));
       }
 
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700' }, 'Log activity');
+      // Sub-status dropdown grouped by Stage (optgroup)
+      const allowed = isTerminalNow ? [] : allowedSubStatuses(c.sub_status);
+      const groupedByStage = {};
+      allowed.forEach(m => { (groupedByStage[m.group] = groupedByStage[m.group] || []).push(m.sub); });
+
+      const subSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+      subSel.appendChild(el('option', { value: '' }, '— No stage change —'));
+      Object.entries(groupedByStage).forEach(([stage, subs]) => {
+        const og = document.createElement('optgroup');
+        og.label = stage;
+        subs.forEach(s => og.appendChild(el('option', { value: s }, s)));
+        subSel.appendChild(og);
+      });
+      fields.sub_status = subSel;
+
+      if (!isTerminalNow) {
+        wrap.appendChild(el('label', { class: 'block' },
+          el('span', { class: 'text-xs font-medium text-slate-600' }, 'Move to Sub-stage (optional, grouped by Stage)'),
+          subSel
+        ));
+      }
+
+      // Conditional area for mandatory fields per target sub-status
+      const conditionalArea = el('div', { class: 'space-y-2' });
+      wrap.appendChild(conditionalArea);
+
+      // --- Follow-up section ---
+      const fuWrap = el('div', { class: 'pt-3 mt-3 border-t border-slate-200' },
+        el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Follow-up'),
+        el('label', { class: 'block' },
+          el('span', { class: 'text-xs font-medium text-slate-600' }, 'Next follow-up (date & time) *'),
+          fields.next_followup_at = el('input', { type: 'datetime-local', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' })
+        ),
+        el('label', { class: 'block' },
+          el('span', { class: 'text-xs font-medium text-slate-600' }, 'Follow-up note (optional)'),
+          fields.next_followup_note = el('input', { type: 'text', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' })
+        )
+      );
+
+      const renderConditional = () => {
+        conditionalArea.innerHTML = '';
+        const target = fields.sub_status.value;
+        const map = state.filterOptions?.sub_statuses || [];
+        const targetGroup = target ? map.find(m => m.sub === target)?.group : null;
+
+        if (target === 'Gone Live') {
+          fields.gone_live_date = el('input', { type: 'date', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.spends_inr     = el('input', { type: 'number', step: '0.01', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.utm_link       = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.utm_medium     = el('input', { type: 'text', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.utm_content    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+            el('option', { value: '' }, '—'),
+            ...(state.filterOptions?.utm_content || []).map(u => el('option', { value: u }, u))
+          );
+          fields.is_recollab    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+            el('option', { value: '' }, '—'),
+            el('option', { value: 'false' }, 'New collab'),
+            el('option', { value: 'true' }, 'Re-collab (RCB)')
+          );
+          fields.rcb_count      = el('input', { type: 'number', disabled: true, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md disabled:bg-slate-100' });
+          fields.is_recollab.addEventListener('change', () => { fields.rcb_count.disabled = fields.is_recollab.value !== 'true'; });
+
+          conditionalArea.appendChild(el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-emerald-700 pt-1' }, 'Gone Live — required fields'));
+          [
+            ['Gone Live Date *', fields.gone_live_date],
+            ['Spends (₹) *', fields.spends_inr],
+            ['UTM Link *', fields.utm_link],
+            ['UTM Medium', fields.utm_medium],
+            ['UTM Content * (drives auto-task)', fields.utm_content],
+            ['Collab Type *', fields.is_recollab],
+            ['RCB Count (if Re-collab)', fields.rcb_count],
+          ].forEach(([lbl, inp]) => conditionalArea.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, lbl), inp)));
+        }
+
+        if (target === 'Post Gone Live') {
+          fields.gone_live_link    = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.insights          = el('textarea', { rows: 3, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.google_drive_link = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          conditionalArea.appendChild(el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-emerald-700 pt-1' }, 'Post Gone Live — required fields'));
+          [
+            ['Gone Live Link *', fields.gone_live_link],
+            ['Insights *', fields.insights],
+            ['Google Drive Link *', fields.google_drive_link],
+          ].forEach(([lbl, inp]) => conditionalArea.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, lbl), inp)));
+        }
+
+        if (target === 'agreement done' || target === 'invoice done') {
+          const which = target === 'agreement done' ? 'agreement' : 'invoice';
+          fields._file = el('input', { type: 'file', accept: 'image/*,application/pdf', class: 'mt-1 w-full text-xs' });
+          fields._fileKind = which;
+          conditionalArea.appendChild(el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-indigo-700 pt-1' }, 'Document upload'));
+          conditionalArea.appendChild(el('label', { class: 'block' },
+            el('span', { class: 'text-xs font-medium text-slate-600' }, `Upload ${which} file *`),
+            fields._file
+          ));
+        }
+
+        // Follow-up — required if current campaign is non-terminal OR target is non-terminal
+        const needsFollowup = (!isTerminalNow && (!target || (targetGroup !== 'Dropped' && targetGroup !== 'Post Gone Live')));
+        if (fuWrap.parentNode) fuWrap.remove();
+        if (needsFollowup) conditionalArea.appendChild(fuWrap);
+      };
+      fields.sub_status.addEventListener('change', renderConditional);
+      renderConditional();
+
+      // --- Submit ---
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700' }, 'Save');
       submitBtn.addEventListener('click', async () => {
-        if (!isTerminal && !fields.next_followup_at.value) return toast('Next follow-up required for active campaigns', 'error');
+        const target = fields.sub_status?.value || '';
+        const map = state.filterOptions?.sub_statuses || [];
+        const targetGroup = target ? map.find(m => m.sub === target)?.group : null;
+        const needsFollowup = (!isTerminalNow && (!target || (targetGroup !== 'Dropped' && targetGroup !== 'Post Gone Live')));
+
+        if (needsFollowup && !fields.next_followup_at?.value) {
+          return toast('Next follow-up date is required (campaign is active)', 'error');
+        }
+
         submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
 
+        // 1. Log the activity itself
         const { error: aErr } = await supabase.from('campaign_activities').insert({
-          campaign_id: c.id, user_id: state.me.user_id, activity_type: fields.activity_type.value, note: fields.note.value.trim() || null
+          campaign_id: c.id, user_id: state.me.user_id,
+          activity_type: fields.activity_type.value, note: fields.note.value.trim() || null
         });
-        if (aErr) { submitBtn.disabled = false; submitBtn.textContent = 'Log activity'; return toast(aErr.message, 'error'); }
+        if (aErr) { submitBtn.disabled = false; submitBtn.textContent = 'Save'; return toast(aErr.message, 'error'); }
 
-        if (!isTerminal) {
-          const { error: cErr } = await supabase.from('campaigns').update({
-            next_followup_at: new Date(fields.next_followup_at.value).toISOString()
-          }).eq('id', c.id);
-          if (cErr) { return toast(cErr.message, 'error'); }
+        // 2. Update campaign (sub_status, mandatory fields, follow-up)
+        const payload = {};
+        if (target) payload.sub_status = target;
+
+        if (target === 'Gone Live') {
+          payload.gone_live_date = fields.gone_live_date.value || null;
+          payload.spends_inr     = fields.spends_inr.value ? parseFloat(fields.spends_inr.value) : null;
+          payload.utm_link       = fields.utm_link.value.trim() || null;
+          payload.utm_medium     = fields.utm_medium.value.trim() || null;
+          payload.utm_content    = fields.utm_content.value || null;
+          payload.is_recollab    = fields.is_recollab.value === 'true' ? true : fields.is_recollab.value === 'false' ? false : null;
+          payload.rcb_count      = fields.rcb_count.value ? parseInt(fields.rcb_count.value) : null;
+        }
+        if (target === 'Post Gone Live') {
+          payload.gone_live_link    = fields.gone_live_link.value.trim() || null;
+          payload.insights          = fields.insights.value.trim() || null;
+          payload.google_drive_link = fields.google_drive_link.value.trim() || null;
+        }
+        if (fields._file && fields._file.files[0]) {
+          const path = await uploadCampaignFile(c.id, fields._fileKind, fields._file.files[0]);
+          if (!path) { submitBtn.disabled = false; submitBtn.textContent = 'Save'; return; }
+          payload[`${fields._fileKind}_file_url`] = path;
+        }
+        if (needsFollowup) {
+          payload.next_followup_at   = new Date(fields.next_followup_at.value).toISOString();
+          payload.next_followup_note = fields.next_followup_note.value.trim() || null;
+        }
+
+        if (Object.keys(payload).length) {
+          const { error: cErr } = await supabase.from('campaigns').update(payload).eq('id', c.id);
+          if (cErr) { submitBtn.disabled = false; submitBtn.textContent = 'Save'; return toast(cErr.message, 'error'); }
+
+          if (target && target !== c.sub_status) {
+            await supabase.from('campaign_activities').insert({
+              campaign_id: c.id, user_id: state.me.user_id, activity_type: 'stage_change',
+              note: `${c.sub_status} → ${target}`,
+              metadata: { from: c.sub_status, to: target },
+            });
+          }
         }
 
         modal.close();
-        toast('Activity logged', 'success');
+        toast('Saved', 'success');
         await fetchCampaignDetail(c.id);
         render();
       });
 
-      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-2' },
+      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-3 border-t border-slate-200' },
         el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
         submitBtn
       ));
+
       const modal = renderModal('Log Activity', wrap);
     }
 
@@ -986,8 +1148,7 @@
           ),
         ),
         el('div', { class: 'flex flex-wrap gap-2' },
-          !isTerminal && canEdit ? el('button', { class: 'px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700', onClick: () => openStatusChangeModal(c) }, 'Change Status') : null,
-          !isTerminal && canEdit ? el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-md hover:bg-slate-50', onClick: () => openLogActivityModal(c) }, 'Log Activity') : null,
+          !isTerminal && canEdit ? el('button', { class: 'px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700', onClick: () => openLogActivityModal(c) }, '+ Log Activity / Update Stage') : null,
           canEdit ? el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-md hover:bg-slate-50', onClick: () => openReassignModal(c) }, 'Reassign') : null,
         )
       );
