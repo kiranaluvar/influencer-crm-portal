@@ -110,14 +110,95 @@
 
     const groupStatusColor = (g) => ({
       'Scraping':             'bg-slate-100 text-slate-700',
-      'Screening':            'bg-blue-100 text-blue-700',
-      'Negotiation':          'bg-amber-100 text-amber-800',
-      'Integration Planning': 'bg-purple-100 text-purple-700',
-      'Documents':            'bg-indigo-100 text-indigo-700',
-      'Gone Live':            'bg-emerald-100 text-emerald-700',
-      'Post Gone Live':       'bg-emerald-200 text-emerald-900',
-      'Dropped':              'bg-rose-100 text-rose-700',
+      'Screening':            'bg-blue-50 text-blue-700',
+      'Negotiation':          'bg-amber-50 text-amber-800',
+      'Integration Planning': 'bg-purple-50 text-purple-700',
+      'Documents':            'bg-indigo-50 text-indigo-700',
+      'Gone Live':            'bg-emerald-50 text-emerald-700',
+      'Post Gone Live':       'bg-emerald-100 text-emerald-900',
+      'Dropped':              'bg-rose-50 text-rose-700',
     }[g] || 'bg-slate-100 text-slate-700');
+
+    // --- UI helpers (Direction 3 design system) ---
+    const AVATAR_PALETTE = [
+      { bg: '#FEE2E2', fg: '#B91C1C' }, // red
+      { bg: '#E0E7FF', fg: '#3730A3' }, // indigo
+      { bg: '#DCFCE7', fg: '#166534' }, // green
+      { bg: '#FEF3C7', fg: '#92400E' }, // amber
+      { bg: '#F3E8FF', fg: '#6B21A8' }, // purple
+      { bg: '#FCE7F3', fg: '#9D174D' }, // pink
+      { bg: '#CCFBF1', fg: '#115E59' }, // teal
+      { bg: '#FFEDD5', fg: '#9A3412' }, // orange
+    ];
+    const avatarColor = (name) => {
+      const s = String(name || '?');
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+      return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
+    };
+    function avatar(name, size = 28) {
+      const c = avatarColor(name);
+      const initial = String(name || '?').trim().charAt(0).toUpperCase();
+      return el('div', {
+        class: 'flex items-center justify-center font-medium shrink-0',
+        style: `width:${size}px;height:${size}px;border-radius:6px;background:${c.bg};color:${c.fg};font-size:${Math.max(11, Math.round(size*0.4))}px;`
+      }, initial);
+    }
+
+    function pageHeader(eyebrow, title, subtitle, actions) {
+      return el('div', { class: 'mb-5' },
+        eyebrow ? el('div', { class: 'text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mb-1.5' }, eyebrow) : null,
+        el('div', { class: 'flex items-end justify-between gap-4 flex-wrap' },
+          el('div', {},
+            el('h1', { class: 'text-[22px] font-semibold tracking-tight text-slate-900' }, title),
+            subtitle ? el('p', { class: 'text-[13px] text-slate-500 mt-0.5' }, subtitle) : null
+          ),
+          actions ? el('div', { class: 'flex gap-2 items-center' }, ...(Array.isArray(actions) ? actions.filter(Boolean) : [actions])) : null
+        )
+      );
+    }
+
+    function subtleBadge(text, variant = 'slate') {
+      const map = {
+        slate:   'bg-slate-100 text-slate-700',
+        info:    'bg-blue-50 text-blue-700',
+        warning: 'bg-amber-50 text-amber-800',
+        success: 'bg-emerald-50 text-emerald-700',
+        livedark:'bg-emerald-100 text-emerald-900',
+        purple:  'bg-purple-50 text-purple-700',
+        indigo:  'bg-indigo-50 text-indigo-700',
+        rose:    'bg-rose-50 text-rose-700',
+      };
+      return el('span', { class: `inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${map[variant] || map.slate}` }, text);
+    }
+
+    function kpiTile(label, value, valueColor = 'text-slate-900') {
+      return el('div', { class: 'bg-slate-50 rounded-md px-3 py-2.5' },
+        el('div', { class: 'text-[10px] text-slate-500 uppercase tracking-wide font-medium' }, label),
+        el('div', { class: `text-[18px] font-semibold mt-0.5 ${valueColor}` }, String(value))
+      );
+    }
+
+    function pipelineStrip(counts, onClick) {
+      // counts: array of { group, count } in canonical order
+      const order = ['Scraping','Screening','Negotiation','Integration Planning','Documents','Gone Live','Post Gone Live','Dropped'];
+      const variants = { 'Scraping':'slate', 'Screening':'info', 'Negotiation':'warning', 'Integration Planning':'purple', 'Documents':'indigo', 'Gone Live':'success', 'Post Gone Live':'livedark', 'Dropped':'rose' };
+      const labels =   { 'Scraping':'Scraping', 'Screening':'Screening', 'Negotiation':'Negotiation', 'Integration Planning':'Integration', 'Documents':'Documents', 'Gone Live':'Gone Live', 'Post Gone Live':'Post Live', 'Dropped':'Dropped' };
+      const lookup = Object.fromEntries((counts || []).map(c => [c.group, c.count]));
+      return el('div', { class: 'grid grid-cols-4 sm:grid-cols-8 gap-1.5 mb-5' },
+        ...order.map(g => {
+          const v = variants[g];
+          const cls = subtleBadge('', v).className; // reuse color mapping
+          return el('button', {
+            class: `text-left px-3 py-2 rounded-md ${cls.replace('inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ','')} hover:ring-1 hover:ring-slate-300 transition`,
+            onClick: () => onClick && onClick(g),
+          },
+            el('div', { class: 'text-[10px] uppercase tracking-wide font-medium opacity-80' }, labels[g]),
+            el('div', { class: 'text-[16px] font-semibold mt-0.5' }, String(lookup[g] || 0))
+          );
+        })
+      );
+    }
 
     const toast = (msg, type = 'info') => {
       const colors = { info: 'bg-slate-900', success: 'bg-emerald-600', error: 'bg-rose-600' };
@@ -198,13 +279,11 @@
 
       let q = supabase.from('campaigns').select(`
         id, name, sub_status, group_status, owner_id, next_followup_at, updated_at, created_at,
-        platform:platforms!inner ( id, platform, username, profile:profiles!inner ( id, name ) ),
+        platform:platforms!inner ( id, platform, username, followers, profile:profiles!inner ( id, name, lead_type ) ),
         owner:team_members!campaigns_owner_id_fkey ( full_name )
       `, { count: 'exact' });
 
       if (L.search) {
-        // Search by campaign name OR profile name OR platform username
-        // PostgREST doesn't support OR across joined tables cleanly; do client-side or split.
         q = q.or(`name.ilike.%${L.search}%`);
       }
       if (L.filters.group_status) q = q.eq('group_status', L.filters.group_status);
@@ -220,6 +299,10 @@
       if (error) { console.error(error); toast(error.message, 'error'); return; }
       L.items = data || [];
       L.total = count || 0;
+
+      // Also fetch global pipeline counts (for the strip)
+      const { data: pc } = await supabase.rpc('dashboard_data');
+      state.pipelineCounts = pc?.pipeline || [];
     }
 
     // ===============================================================
@@ -489,87 +572,110 @@
       const fo = state.filterOptions;
       const totalPages = Math.max(1, Math.ceil(L.total / PAGE_SIZE));
 
+      // Compute pipeline counts from filter_options' campaign data (or fall back to a quick query result if cached)
+      const pipelineCounts = state.pipelineCounts || [];
+
       // Toolbar
       const searchInp = el('input', { type: 'search', placeholder: 'Search campaign name…', value: L.search,
-        class: 'flex-1 sm:flex-none sm:w-64 px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500',
+        class: 'flex-1 sm:flex-none sm:w-64 px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400 bg-white',
         oninput: debounce(e => { L.search = e.target.value; L.page = 1; refresh('campaigns'); }, 350)
       });
 
-      const groupSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-300 rounded-md',
+      const groupSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-200 rounded-md bg-white',
         onchange: e => { L.filters.group_status = e.target.value || undefined; L.page = 1; refresh('campaigns'); }
       },
-        el('option', { value: '' }, 'All group statuses'),
+        el('option', { value: '' }, 'All stages'),
         ...(fo?.group_statuses || []).map(g => el('option', { value: g, selected: L.filters.group_status === g }, g))
       );
 
-      const ownerSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-300 rounded-md',
+      const ownerSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-200 rounded-md bg-white',
         onchange: e => { L.filters.owner_id = e.target.value || undefined; L.page = 1; refresh('campaigns'); }
       },
         el('option', { value: '' }, 'All owners'),
         ...(fo?.owners || []).map(o => el('option', { value: o.id, selected: L.filters.owner_id === o.id }, o.name || '—'))
       );
 
-      const platSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-300 rounded-md',
+      const platSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-200 rounded-md bg-white',
         onchange: e => { L.filters.platform = e.target.value || undefined; L.page = 1; refresh('campaigns'); }
       },
         el('option', { value: '' }, 'All platforms'),
         ...(fo?.platforms || []).map(p => el('option', { value: p, selected: L.filters.platform === p }, p))
       );
 
-      const toolbar = el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' },
-        searchInp, groupSel, ownerSel, platSel,
-        el('div', { class: 'flex-1' }),
-        el('button', { class: 'px-3 py-2 text-sm bg-white border border-slate-300 rounded-md hover:bg-slate-50', onClick: exportCampaignsCSV }, '⬇ Export CSV'),
-        state.me?.role === 'admin' ? el('button', { class: 'px-3 py-2 text-sm bg-white border border-slate-300 rounded-md hover:bg-slate-50', onClick: openImportCSVModal }, '⬆ Import CSV') : null,
-        el('button', { class: 'px-3 py-2 text-sm rounded-md btn-brand',
-          onClick: openAddProfileModal }, '+ Add Profile')
+      const strip = pipelineStrip(pipelineCounts, (g) => {
+        L.filters.group_status = L.filters.group_status === g ? undefined : g;
+        L.page = 1; refresh('campaigns');
+      });
+
+      // Refined data table using CSS grid
+      const cols = 'minmax(0,32px) minmax(0,2fr) minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) minmax(0,0.9fr)';
+      const headerRow = el('div', { class: 'hidden md:grid gap-3 items-center px-4 py-2.5 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-wide font-medium border-b border-slate-200', style: `grid-template-columns:${cols};` },
+        el('div', {}), el('div', {}, 'Influencer'), el('div', {}, 'Platform'),
+        el('div', {}, 'Stage'), el('div', {}, 'Owner'),
+        el('div', { class: 'text-right' }, 'Follow-up')
       );
 
-      // Table
-      const rows = L.items.length ? L.items.map(c => el('tr', { class: 'border-b border-slate-100 hover:bg-slate-50 cursor-pointer',
-          onClick: () => { window.location.hash = `#campaigns/${c.id}`; }
-        },
-        el('td', { class: 'px-3 py-2.5 text-sm font-medium text-slate-900' }, c.name),
-        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, c.platform?.profile?.name || '—'),
-        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, `${c.platform?.platform || '—'} · @${c.platform?.username || '—'}`),
-        el('td', { class: 'px-3 py-2.5' },
-          el('span', { class: `badge ${groupStatusColor(c.group_status)}` }, c.group_status)
-        ),
-        el('td', { class: 'px-3 py-2.5 text-xs text-slate-500' }, c.sub_status),
-        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, c.owner?.full_name || '—'),
-        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, c.next_followup_at
-          ? el('span', { class: new Date(c.next_followup_at) < new Date() ? 'text-rose-600 font-medium' : 'text-slate-600' }, fmtDateTime(c.next_followup_at))
-          : '—'),
-        el('td', { class: 'px-3 py-2.5 text-xs text-slate-500' }, fmtDate(c.updated_at)),
-      )) : [el('tr', {}, el('td', { colspan: 8, class: 'px-3 py-12 text-center text-sm text-slate-500' }, 'No campaigns yet. Add a profile + platform to begin.'))];
+      const renderRow = (c) => {
+        const p  = c.platform?.profile;
+        const pl = c.platform;
+        const stageVariant = { 'Scraping':'slate','Screening':'info','Negotiation':'warning','Integration Planning':'purple','Documents':'indigo','Gone Live':'success','Post Gone Live':'livedark','Dropped':'rose' }[c.group_status] || 'slate';
+        const overdue = c.next_followup_at && new Date(c.next_followup_at) < new Date() && !['Dropped','Post Gone Live'].includes(c.group_status);
+        return el('div', { class: 'grid gap-3 items-center px-4 py-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer', style: `grid-template-columns:${cols};`,
+          onClick: () => { window.location.hash = `#campaigns/${c.id}`; } },
+          avatar(p?.name || '?', 28),
+          el('div', { class: 'min-w-0' },
+            el('div', { class: 'text-[13px] font-medium text-slate-900 truncate' }, p?.name || '—'),
+            el('div', { class: 'text-[11px] text-slate-400 truncate font-mono' }, `${c.name} · ${p?.lead_type || ''} lead`)
+          ),
+          el('div', { class: 'min-w-0' },
+            el('div', { class: 'text-[13px] text-slate-700' }, pl?.platform || '—'),
+            el('div', { class: 'text-[11px] text-slate-400 truncate' }, `@${pl?.username || ''}${pl?.followers ? ' · ' + Number(pl.followers).toLocaleString() : ''}`)
+          ),
+          el('div', {}, subtleBadge(c.group_status, stageVariant)),
+          el('div', { class: 'text-[12px] text-slate-600 truncate' }, c.owner?.full_name || '—'),
+          el('div', { class: `text-[11px] text-right truncate ${overdue ? 'text-rose-600 font-medium' : 'text-slate-500'}` },
+            c.next_followup_at ? fmtDateTime(c.next_followup_at) : '—'
+          )
+        );
+      };
+
+      const tableBody = L.items.length
+        ? L.items.map(renderRow)
+        : [el('div', { class: 'px-4 py-16 text-center text-sm text-slate-400' }, 'No campaigns match these filters. Click + New profile to begin.')];
 
       const table = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden' },
-        el('div', { class: 'overflow-x-auto scrollbar-thin' },
-          el('table', { class: 'w-full' },
-            el('thead', { class: 'bg-slate-50 border-b border-slate-200' },
-              el('tr', {},
-                ...['Campaign', 'Influencer', 'Platform', 'Group Status', 'Sub Status', 'Owner', 'Next Follow-up', 'Updated']
-                  .map(h => el('th', { class: 'px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500' }, h))
-              )
-            ),
-            el('tbody', {}, ...rows)
-          )
-        )
+        headerRow,
+        ...tableBody
       );
 
       // Pagination
-      const pag = el('div', { class: 'flex items-center justify-between mt-3 text-sm text-slate-600' },
+      const pag = el('div', { class: 'flex items-center justify-between mt-3 text-[12px] text-slate-500' },
         el('span', {}, `Showing ${L.items.length} of ${L.total}`),
-        el('div', { class: 'flex gap-1' },
-          el('button', { class: 'px-2 py-1 border border-slate-300 rounded disabled:opacity-50',
+        el('div', { class: 'flex gap-1 items-center' },
+          el('button', { class: 'px-2.5 py-1 border border-slate-200 rounded disabled:opacity-40 bg-white',
             disabled: L.page <= 1, onClick: () => { L.page--; refresh('campaigns'); } }, 'Prev'),
           el('span', { class: 'px-3 py-1' }, `Page ${L.page} / ${totalPages}`),
-          el('button', { class: 'px-2 py-1 border border-slate-300 rounded disabled:opacity-50',
+          el('button', { class: 'px-2.5 py-1 border border-slate-200 rounded disabled:opacity-40 bg-white',
             disabled: L.page >= totalPages, onClick: () => { L.page++; refresh('campaigns'); } }, 'Next')
         )
       );
 
-      return el('div', {}, toolbar, table, pag);
+      return el('div', {},
+        pageHeader(
+          'Influencer marketing',
+          'Active campaigns',
+          `Tracking ${L.total} campaigns across all platforms`,
+          [
+            el('button', { class: 'px-3 py-2 text-sm bg-white border border-slate-200 rounded-md hover:bg-slate-50 text-slate-700', onClick: exportCampaignsCSV }, '⬇ Export'),
+            state.me?.role === 'admin' ? el('button', { class: 'px-3 py-2 text-sm bg-white border border-slate-200 rounded-md hover:bg-slate-50 text-slate-700', onClick: openImportCSVModal }, '⬆ Import') : null,
+            el('button', { class: 'px-3 py-2 text-sm rounded-md btn-brand', onClick: openAddProfileModal }, '+ New profile')
+          ]
+        ),
+        strip,
+        // toolbar without the action buttons (moved to page header)
+        el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' }, searchInp, groupSel, ownerSel, platSel),
+        table, pag
+      );
     }
 
     // ===============================================================
@@ -581,78 +687,72 @@
       const totalPages = Math.max(1, Math.ceil(L.total / PAGE_SIZE));
 
       const searchInp = el('input', { type: 'search', placeholder: 'Search name, email, phone…', value: L.search,
-        class: 'flex-1 sm:flex-none sm:w-64 px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500',
+        class: 'flex-1 sm:flex-none sm:w-64 px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400 bg-white',
         oninput: debounce(e => { L.search = e.target.value; L.page = 1; refresh('profiles'); }, 350)
       });
-
-      const ltSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-300 rounded-md',
+      const ltSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-200 rounded-md bg-white',
         onchange: e => { L.filters.lead_type = e.target.value || undefined; L.page = 1; refresh('profiles'); }
       },
         el('option', { value: '' }, 'All lead types'),
         ...(fo?.lead_types || []).map(t => el('option', { value: t, selected: L.filters.lead_type === t }, t))
       );
-
-      const ownerSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-300 rounded-md',
+      const ownerSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-200 rounded-md bg-white',
         onchange: e => { L.filters.created_by = e.target.value || undefined; L.page = 1; refresh('profiles'); }
       },
         el('option', { value: '' }, 'All owners'),
         ...(fo?.owners || []).map(o => el('option', { value: o.id, selected: L.filters.created_by === o.id }, o.name || '—'))
       );
 
-      const toolbar = el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' },
-        searchInp, ltSel, ownerSel,
-        el('div', { class: 'flex-1' }),
-        el('button', { class: 'px-3 py-2 text-sm btn-brand rounded-md',
-          onClick: openAddProfileModal }, '+ Add Profile')
+      const cols = 'minmax(0,32px) minmax(0,2fr) minmax(0,0.8fr) minmax(0,1.4fr) minmax(0,1.6fr) minmax(0,1fr) minmax(0,80px)';
+      const headerRow = el('div', { class: 'hidden md:grid gap-3 items-center px-4 py-2.5 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-wide font-medium border-b border-slate-200', style: `grid-template-columns:${cols};` },
+        el('div', {}), el('div', {}, 'Name'), el('div', {}, 'Lead'),
+        el('div', {}, 'Contact'), el('div', {}, 'Platforms'),
+        el('div', {}, 'Owner'),
+        el('div', { class: 'text-right' }, '')
       );
 
-      const rows = L.items.length ? L.items.map(p => el('tr', { class: 'border-b border-slate-100 hover:bg-slate-50' },
-        el('td', { class: 'px-3 py-2.5 text-sm font-medium text-slate-900 cursor-pointer',
-          onClick: () => { window.location.hash = `#profiles/${p.id}`; } }, p.name),
-        el('td', { class: 'px-3 py-2.5 text-sm' },
-          el('span', { class: 'badge bg-slate-100 text-slate-700' }, p.lead_type)
+      const rows = L.items.length ? L.items.map(p => el('div', { class: 'grid gap-3 items-center px-4 py-3 border-b border-slate-100 hover:bg-slate-50', style: `grid-template-columns:${cols};` },
+        avatar(p.name, 28),
+        el('div', { class: 'min-w-0 cursor-pointer', onClick: () => { window.location.hash = `#profiles/${p.id}`; } },
+          el('div', { class: 'text-[13px] font-medium text-slate-900 truncate' }, p.name),
+          el('div', { class: 'text-[11px] text-slate-400 truncate' }, p.region || '—')
         ),
-        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, p.email || '—'),
-        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, p.phone || '—'),
-        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, p.region || '—'),
-        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' },
+        el('div', {}, subtleBadge(p.lead_type, 'slate')),
+        el('div', { class: 'text-[12px] text-slate-600 min-w-0 truncate' },
+          p.email || p.phone || '—'
+        ),
+        el('div', { class: 'text-[12px] text-slate-600 min-w-0 truncate' },
           (p.platforms || []).length
             ? (p.platforms || []).map(pl => `${pl.platform}·@${pl.username}`).join(', ')
-            : el('span', { class: 'text-xs text-amber-700' }, 'no platforms')
+            : el('span', { class: 'text-[11px] text-amber-700' }, 'no platforms')
         ),
-        el('td', { class: 'px-3 py-2.5 text-sm text-slate-600' }, p.owner?.full_name || '—'),
-        el('td', { class: 'px-3 py-2.5 text-right' },
-          el('button', { class: 'text-xs text-blue-600 hover:underline',
-            onClick: () => openAddPlatformModal(p) }, '+ Platform')
+        el('div', { class: 'text-[12px] text-slate-500 truncate' }, p.owner?.full_name || '—'),
+        el('div', { class: 'text-right' },
+          el('button', { class: 'text-[11px] text-brand hover:underline',
+            onClick: () => openAddPlatformModal(p) }, '+ platform')
         ),
-      )) : [el('tr', {}, el('td', { colspan: 8, class: 'px-3 py-12 text-center text-sm text-slate-500' }, 'No profiles yet. Click + Add Profile to begin.'))];
+      )) : [el('div', { class: 'px-4 py-16 text-center text-sm text-slate-400' }, 'No profiles yet. Click + New profile to begin.')];
 
-      const table = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden' },
-        el('div', { class: 'overflow-x-auto scrollbar-thin' },
-          el('table', { class: 'w-full' },
-            el('thead', { class: 'bg-slate-50 border-b border-slate-200' },
-              el('tr', {},
-                ...['Name', 'Lead Type', 'Email', 'Phone', 'Region', 'Platforms', 'Owner', '']
-                  .map(h => el('th', { class: 'px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500' }, h))
-              )
-            ),
-            el('tbody', {}, ...rows)
-          )
-        )
-      );
+      const table = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden' }, headerRow, ...rows);
 
-      const pag = el('div', { class: 'flex items-center justify-between mt-3 text-sm text-slate-600' },
+      const pag = el('div', { class: 'flex items-center justify-between mt-3 text-[12px] text-slate-500' },
         el('span', {}, `Showing ${L.items.length} of ${L.total}`),
-        el('div', { class: 'flex gap-1' },
-          el('button', { class: 'px-2 py-1 border border-slate-300 rounded disabled:opacity-50',
+        el('div', { class: 'flex gap-1 items-center' },
+          el('button', { class: 'px-2.5 py-1 border border-slate-200 rounded disabled:opacity-40 bg-white',
             disabled: L.page <= 1, onClick: () => { L.page--; refresh('profiles'); } }, 'Prev'),
           el('span', { class: 'px-3 py-1' }, `Page ${L.page} / ${totalPages}`),
-          el('button', { class: 'px-2 py-1 border border-slate-300 rounded disabled:opacity-50',
+          el('button', { class: 'px-2.5 py-1 border border-slate-200 rounded disabled:opacity-40 bg-white',
             disabled: L.page >= totalPages, onClick: () => { L.page++; refresh('profiles'); } }, 'Next')
         )
       );
 
-      return el('div', {}, toolbar, table, pag);
+      return el('div', {},
+        pageHeader('Influencer marketing', 'Profiles', `${L.total} influencers in your directory`,
+          el('button', { class: 'px-3 py-2 text-sm rounded-md btn-brand', onClick: openAddProfileModal }, '+ New profile')
+        ),
+        el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' }, searchInp, ltSel, ownerSel),
+        table, pag
+      );
     }
 
     // ===============================================================
@@ -768,10 +868,11 @@
       ) : null;
 
       return el('div', {},
+        pageHeader('Follow-ups', 'My pipeline', `${items.length} scheduled follow-ups`, null),
         el('div', { class: 'grid grid-cols-2 md:grid-cols-4 gap-3 mb-5' },
           kpi('Overdue', overdue.length, 'text-rose-600'),
           kpi('Due today', today.length, 'text-amber-600'),
-          kpi('Due this week', week.length, 'text-blue-600'),
+          kpi('Due this week', week.length, 'text-brand'),
           kpi('Later', later.length, 'text-slate-700'),
         ),
         el('div', { class: 'flex gap-2 mb-4' },
@@ -806,12 +907,12 @@
       );
 
       const kpis = el('div', { class: 'grid grid-cols-2 md:grid-cols-6 gap-3 mb-5' },
-        kpi('Open',          d.kpis?.open_campaigns ?? 0, 'text-slate-900'),
-        kpi('Gone Live',     d.kpis?.gone_live ?? 0,       'text-emerald-600'),
-        kpi('Post Live',     d.kpis?.post_gone_live ?? 0,  'text-emerald-700'),
-        kpi('Dropped',       d.kpis?.dropped ?? 0,         'text-rose-600'),
-        kpi('Spends (₹)',    Number(d.kpis?.total_spends || 0).toLocaleString('en-IN'), 'text-brand'),
-        kpi('Overdue F/U',   d.kpis?.overdue_followups ?? 0, 'text-amber-600'),
+        kpiTile('Open',          d.kpis?.open_campaigns ?? 0,                'text-slate-900'),
+        kpiTile('Gone Live',     d.kpis?.gone_live ?? 0,                     'text-emerald-600'),
+        kpiTile('Post Live',     d.kpis?.post_gone_live ?? 0,                'text-emerald-700'),
+        kpiTile('Dropped',       d.kpis?.dropped ?? 0,                       'text-rose-600'),
+        kpiTile('Spends (₹)',    Number(d.kpis?.total_spends || 0).toLocaleString('en-IN'), 'text-brand'),
+        kpiTile('Overdue F/U',   d.kpis?.overdue_followups ?? 0,             'text-amber-600'),
       );
 
       // Charts placeholders
@@ -871,7 +972,10 @@
         }
       }, 0);
 
-      return el('div', {}, kpis, charts, lb);
+      return el('div', {},
+        pageHeader('Overview', 'Dashboard', 'Performance across all campaigns', null),
+        kpis, charts, lb
+      );
     }
 
     // ===============================================================
@@ -1025,7 +1129,10 @@
         }
       }, 0);
 
-      return el('div', {}, dateBar, hourlyCard, agentDaily, matrixCard, l2eCard, dropCard);
+      return el('div', {},
+        pageHeader('Insights', 'Reports', 'Activity and performance over a custom date range', null),
+        dateBar, hourlyCard, agentDaily, matrixCard, l2eCard, dropCard
+      );
     }
 
     // ===============================================================
@@ -1061,6 +1168,7 @@
       };
 
       return el('div', {},
+        pageHeader('Administration', 'Team', `${m.length} members · manage roles and team leads`, null),
         el('div', { class: 'bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-900' },
           'Team members appear here after they sign in via Google for the first time. Then you can promote them to TL or admin, assign team leads, or deactivate.'
         ),
@@ -1726,20 +1834,30 @@
       const isTerminal = ['Dropped', 'Post Gone Live'].includes(c.group_status);
       const canEdit = canEditCampaign(c);
       const isOverdue = c.next_followup_at && new Date(c.next_followup_at) < new Date() && !isTerminal;
+      const stageVariant = { 'Scraping':'slate','Screening':'info','Negotiation':'warning','Integration Planning':'purple','Documents':'indigo','Gone Live':'success','Post Gone Live':'livedark','Dropped':'rose' }[c.group_status] || 'slate';
 
       // Header
-      const header = el('div', { class: 'flex items-start justify-between gap-4 mb-4 flex-wrap' },
-        el('div', {},
-          el('a', { href: '#campaigns', class: 'text-xs text-slate-500 hover:text-blue-600' }, '← Back to campaigns'),
-          el('h1', { class: 'text-xl font-semibold mt-1' }, c.name),
-          el('div', { class: 'flex items-center gap-2 mt-1.5 text-sm text-slate-600' },
-            el('span', { class: `badge ${groupStatusColor(c.group_status)}` }, c.group_status),
-            el('span', { class: 'text-xs text-slate-500' }, c.sub_status)
+      const header = el('div', { class: 'mb-5' },
+        el('a', { href: '#campaigns', class: 'text-[11px] font-semibold text-slate-400 uppercase tracking-[0.08em] hover:text-brand' }, '← Campaigns'),
+        el('div', { class: 'flex items-start justify-between gap-4 mt-1.5 flex-wrap' },
+          el('div', { class: 'flex items-center gap-3' },
+            avatar(p.name, 44),
+            el('div', {},
+              el('h1', { class: 'text-[22px] font-semibold tracking-tight text-slate-900' }, p.name),
+              el('div', { class: 'flex items-center gap-2 mt-0.5 text-[12px] text-slate-500' },
+                el('span', { class: 'font-mono' }, c.name),
+                el('span', {}, '·'),
+                el('span', {}, `${pl.platform} @${pl.username}`),
+                el('span', {}, '·'),
+                subtleBadge(c.group_status, stageVariant),
+                el('span', { class: 'text-[11px] text-slate-400' }, c.sub_status)
+              )
+            )
           ),
-        ),
-        el('div', { class: 'flex flex-wrap gap-2' },
-          !isTerminal && canEdit ? el('button', { class: 'px-3 py-1.5 text-sm btn-brand rounded-md', onClick: () => openLogActivityModal(c) }, '+ Log Activity / Update Stage') : null,
-          canEdit ? el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-md hover:bg-slate-50', onClick: () => openReassignModal(c) }, 'Reassign') : null,
+          el('div', { class: 'flex flex-wrap gap-2' },
+            !isTerminal && canEdit ? el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand', onClick: () => openLogActivityModal(c) }, '+ Log activity / Update stage') : null,
+            canEdit ? el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-md hover:bg-slate-50 text-slate-700', onClick: () => openReassignModal(c) }, 'Reassign') : null,
+          )
         )
       );
 
@@ -1860,17 +1978,23 @@
       const p = state.detail.profile;
       if (state.detail.loading || !p) return el('div', { class: 'text-center text-sm text-slate-500 py-10' }, 'Loading…');
 
-      const header = el('div', { class: 'flex items-start justify-between gap-4 mb-4 flex-wrap' },
-        el('div', {},
-          el('a', { href: '#profiles', class: 'text-xs text-slate-500 hover:text-blue-600' }, '← Back to profiles'),
-          el('h1', { class: 'text-xl font-semibold mt-1' }, p.name),
-          el('div', { class: 'flex items-center gap-2 mt-1.5 text-sm text-slate-600' },
-            el('span', { class: 'badge bg-slate-100 text-slate-700' }, p.lead_type + ' lead'),
-            el('span', { class: 'text-xs text-slate-500' }, 'Created by ' + (p.owner?.full_name || '—'))
-          )
-        ),
-        el('button', { class: 'px-3 py-1.5 text-sm btn-brand rounded-md',
-          onClick: () => openAddPlatformModal(p) }, '+ Add Platform')
+      const header = el('div', { class: 'mb-5' },
+        el('a', { href: '#profiles', class: 'text-[11px] font-semibold text-slate-400 uppercase tracking-[0.08em] hover:text-brand' }, '← Profiles'),
+        el('div', { class: 'flex items-start justify-between gap-4 mt-1.5 flex-wrap' },
+          el('div', { class: 'flex items-center gap-3' },
+            avatar(p.name, 44),
+            el('div', {},
+              el('h1', { class: 'text-[22px] font-semibold tracking-tight text-slate-900' }, p.name),
+              el('div', { class: 'flex items-center gap-2 mt-0.5 text-[12px] text-slate-500' },
+                subtleBadge(p.lead_type + ' lead', 'slate'),
+                el('span', {}, '·'),
+                el('span', {}, 'Created by ' + (p.owner?.full_name || '—'))
+              )
+            )
+          ),
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand',
+            onClick: () => openAddPlatformModal(p) }, '+ Add platform')
+        )
       );
 
       const contact = el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4 mb-4' },
@@ -2010,10 +2134,6 @@
       const main = el('main', { class: 'flex-1 overflow-y-auto scrollbar-thin bg-slate-50' },
         header,
         el('div', { class: 'p-4 md:p-8 max-w-screen-2xl mx-auto' },
-          el('div', { class: 'hidden md:flex items-center justify-between mb-6' },
-            el('h1', { class: 'text-2xl font-semibold text-slate-900' }, ROUTES[state.route]?.label),
-            el('div', { class: 'text-sm text-slate-500' }, state.me?.full_name + ' · ' + (state.me?.role || 'user'))
-          ),
           body
         )
       );
