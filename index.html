@@ -6,12 +6,30 @@
   <meta name="theme-color" content="#0f172a" />
   <title>Influencer CRM — BrightChamps</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
-    :root { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    :root {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      --brand:      #4060f0;
+      --brand-dark: #3050e0;
+      --brand-soft: #eaf0ff;
+      --bc-yellow:  #f0d000;
+      --bc-orange:  #f08000;
+      --bc-green:   #40d060;
+      --bc-cyan:    #40c0f0;
+      --bc-red:     #f04040;
+    }
     body { font-family: 'Inter', system-ui, sans-serif; }
+    .btn-brand { background-color: var(--brand); color: white; }
+    .btn-brand:hover { background-color: var(--brand-dark); }
+    .btn-brand:disabled { opacity: 0.5; cursor: not-allowed; }
+    .text-brand { color: var(--brand); }
+    .text-brand:hover { color: var(--brand-dark); }
+    .border-brand { border-color: var(--brand); }
+    .ring-brand:focus { box-shadow: 0 0 0 2px var(--brand); outline: none; }
     .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
     .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
     .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
@@ -22,6 +40,8 @@
       .sidebar-mobile { transform: translateX(-100%); transition: transform 0.2s; }
       .sidebar-mobile.open { transform: translateX(0); }
     }
+    /* Heatmap cell colors */
+    .heatmap-cell { color: #fff; font-size: 11px; padding: 4px 6px; text-align: center; min-width: 32px; }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-900 antialiased">
@@ -39,6 +59,8 @@
     const LANGUAGES = ['Hindi','English','Tamil','Telugu','Kannada','Malayalam','Marathi','Gujarati','Bengali','Punjabi','Urdu'];
 
     const COUNTRIES = ['Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina','Armenia','Australia','Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Benin','Bhutan','Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cabo Verde','Cambodia','Cameroon','Canada','Central African Republic','Chad','Chile','China','Colombia','Comoros','Congo','Costa Rica','Croatia','Cuba','Cyprus','Czech Republic','Denmark','Djibouti','Dominica','Dominican Republic','DR Congo','Ecuador','Egypt','El Salvador','Equatorial Guinea','Eritrea','Estonia','Eswatini','Ethiopia','Fiji','Finland','France','Gabon','Gambia','Georgia','Germany','Ghana','Greece','Grenada','Guatemala','Guinea','Guinea-Bissau','Guyana','Haiti','Honduras','Hungary','Iceland','India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Ivory Coast','Jamaica','Japan','Jordan','Kazakhstan','Kenya','Kiribati','Kosovo','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon','Lesotho','Liberia','Libya','Liechtenstein','Lithuania','Luxembourg','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Marshall Islands','Mauritania','Mauritius','Mexico','Micronesia','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nauru','Nepal','Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Korea','North Macedonia','Norway','Oman','Pakistan','Palau','Palestine','Panama','Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Romania','Russia','Rwanda','Saint Kitts and Nevis','Saint Lucia','Saint Vincent and the Grenadines','Samoa','San Marino','Sao Tome and Principe','Saudi Arabia','Senegal','Serbia','Seychelles','Sierra Leone','Singapore','Slovakia','Slovenia','Solomon Islands','Somalia','South Africa','South Korea','South Sudan','Spain','Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan','Tanzania','Thailand','Timor-Leste','Togo','Tonga','Trinidad and Tobago','Tunisia','Turkey','Turkmenistan','Tuvalu','Uganda','Ukraine','United Arab Emirates','United Kingdom','United States','Uruguay','Uzbekistan','Vanuatu','Vatican City','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe'];
+
+    const LOGO_B64 = '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';
 
     // ===============================================================
     // SUPABASE INIT
@@ -327,7 +349,7 @@
         el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-slate-500' }, label)
       );
 
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700' }, 'Create Profile + Platform');
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Create Profile + Platform');
       submitBtn.addEventListener('click', async () => {
         const checkedLangs = fields.languages.filter(cb => cb.querySelector('input').checked).map(cb => cb.querySelector('input').value);
         const profilePayload = {
@@ -425,7 +447,7 @@
       form.appendChild(mkField('Avg Views (last 10 collabs)', 'avg_views', 'number'));
       form.appendChild(mkField('Followers', 'followers', 'number'));
 
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700' }, 'Add Platform');
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Add Platform');
       submitBtn.addEventListener('click', async () => {
         const payload = {
           profile_id: profile.id,
@@ -497,7 +519,9 @@
       const toolbar = el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' },
         searchInp, groupSel, ownerSel, platSel,
         el('div', { class: 'flex-1' }),
-        el('button', { class: 'px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700',
+        el('button', { class: 'px-3 py-2 text-sm bg-white border border-slate-300 rounded-md hover:bg-slate-50', onClick: exportCampaignsCSV }, '⬇ Export CSV'),
+        state.me?.role === 'admin' ? el('button', { class: 'px-3 py-2 text-sm bg-white border border-slate-300 rounded-md hover:bg-slate-50', onClick: openImportCSVModal }, '⬆ Import CSV') : null,
+        el('button', { class: 'px-3 py-2 text-sm rounded-md btn-brand',
           onClick: openAddProfileModal }, '+ Add Profile')
       );
 
@@ -578,7 +602,7 @@
       const toolbar = el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' },
         searchInp, ltSel, ownerSel,
         el('div', { class: 'flex-1' }),
-        el('button', { class: 'px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700',
+        el('button', { class: 'px-3 py-2 text-sm btn-brand rounded-md',
           onClick: openAddProfileModal }, '+ Add Profile')
       );
 
@@ -632,13 +656,579 @@
     }
 
     // ===============================================================
-    // PLACEHOLDER VIEWS (built in next steps)
+    // CSV HELPERS
     // ===============================================================
-    function viewPlaceholder(title, note) {
-      return el('div', { class: 'bg-white border border-dashed border-slate-300 rounded-lg p-10 text-center' },
-        el('h2', { class: 'text-lg font-semibold text-slate-700 mb-2' }, title),
-        el('p', { class: 'text-sm text-slate-500' }, note)
+    function toCSV(rows, columns) {
+      const esc = (v) => {
+        if (v == null) return '';
+        const s = String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const head = columns.map(c => esc(c.label)).join(',');
+      const body = rows.map(r => columns.map(c => esc(typeof c.value === 'function' ? c.value(r) : r[c.value])).join(',')).join('\n');
+      return head + '\n' + body;
+    }
+    function downloadCSV(filename, csv) {
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = el('a', { href: url, download: filename });
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    }
+    function parseCSV(text) {
+      // Simple CSV parser supporting quoted fields with commas
+      const rows = [];
+      let row = [], val = '', inQ = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQ) {
+          if (c === '"' && text[i+1] === '"') { val += '"'; i++; }
+          else if (c === '"') inQ = false;
+          else val += c;
+        } else {
+          if (c === '"') inQ = true;
+          else if (c === ',') { row.push(val); val = ''; }
+          else if (c === '\n' || c === '\r') { if (c === '\r' && text[i+1] === '\n') i++; row.push(val); rows.push(row); row = []; val = ''; }
+          else val += c;
+        }
+      }
+      if (val !== '' || row.length) { row.push(val); rows.push(row); }
+      return rows.filter(r => r.some(x => x !== ''));
+    }
+
+    // ===============================================================
+    // FOLLOW-UPS VIEW
+    // ===============================================================
+    let followupsCache = { items: [], scope: 'mine' };
+    async function fetchFollowups() {
+      const scope = followupsCache.scope;
+      let q = supabase.from('campaigns').select(`
+        id, name, sub_status, group_status, next_followup_at, next_followup_note, updated_at,
+        platform:platforms!inner ( platform, username, profile:profiles!inner ( name, phone, email ) ),
+        owner:team_members!campaigns_owner_id_fkey ( user_id, full_name )
+      `).not('next_followup_at', 'is', null)
+        .not('group_status', 'in', '("Dropped","Post Gone Live")')
+        .order('next_followup_at', { ascending: true })
+        .limit(500);
+
+      if (scope === 'mine')  q = q.eq('owner_id', state.me.user_id);
+      // 'team' / 'all' rely on RLS — TLs see their team only via RLS; admins see all.
+
+      const { data, error } = await q;
+      if (error) { toast(error.message, 'error'); return; }
+      followupsCache.items = data || [];
+    }
+
+    function viewFollowups() {
+      const items = followupsCache.items;
+      const now = new Date();
+      const startOfDay = new Date(now); startOfDay.setHours(0,0,0,0);
+      const endOfDay = new Date(now); endOfDay.setHours(23,59,59,999);
+      const endOfWeek = new Date(startOfDay); endOfWeek.setDate(endOfWeek.getDate() + (7 - endOfWeek.getDay()));
+
+      const overdue = items.filter(c => new Date(c.next_followup_at) < startOfDay);
+      const today   = items.filter(c => { const d = new Date(c.next_followup_at); return d >= startOfDay && d <= endOfDay; });
+      const week    = items.filter(c => { const d = new Date(c.next_followup_at); return d > endOfDay && d <= endOfWeek; });
+      const later   = items.filter(c => new Date(c.next_followup_at) > endOfWeek);
+
+      const kpi = (label, val, color) => el('div', { class: `bg-white border border-slate-200 rounded-lg p-4` },
+        el('div', { class: 'text-xs text-slate-500 font-medium uppercase tracking-wide' }, label),
+        el('div', { class: `text-2xl font-bold mt-1 ${color}` }, String(val))
       );
+
+      const scopeBtn = (k, label) => el('button', {
+        class: `px-3 py-1.5 text-sm rounded-md border ${followupsCache.scope === k ? 'btn-brand border-transparent' : 'bg-white border-slate-300 hover:bg-slate-50'}`,
+        onClick: async () => { followupsCache.scope = k; await fetchFollowups(); render(); }
+      }, label);
+
+      const section = (title, list, urgent) => list.length ? el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
+        el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between' },
+          el('div', { class: 'text-sm font-semibold' }, title),
+          el('div', { class: 'text-xs text-slate-500' }, `${list.length} items`)
+        ),
+        el('div', { class: 'divide-y divide-slate-100' },
+          ...list.map(c => el('div', { class: 'px-4 py-2.5 hover:bg-slate-50 cursor-pointer grid grid-cols-12 gap-2 items-center',
+            onClick: () => { window.location.hash = `#campaigns/${c.id}`; } },
+            el('div', { class: 'col-span-12 md:col-span-3' },
+              el('div', { class: 'text-sm font-medium truncate' }, c.name),
+              el('div', { class: 'text-xs text-slate-500 truncate' }, `${c.platform?.platform || ''} · @${c.platform?.username || ''}`)
+            ),
+            el('div', { class: 'col-span-6 md:col-span-3 text-xs text-slate-600 truncate' },
+              c.platform?.profile?.name || '—'
+            ),
+            el('div', { class: 'col-span-6 md:col-span-2' },
+              el('span', { class: `badge ${groupStatusColor(c.group_status)}` }, c.group_status)
+            ),
+            el('div', { class: `col-span-6 md:col-span-2 text-xs ${urgent ? 'text-rose-600 font-semibold' : 'text-slate-600'}` },
+              fmtDateTime(c.next_followup_at)
+            ),
+            el('div', { class: 'col-span-6 md:col-span-2 text-xs text-slate-500 text-right truncate' }, c.owner?.full_name || '—')
+          ))
+        )
+      ) : null;
+
+      return el('div', {},
+        el('div', { class: 'grid grid-cols-2 md:grid-cols-4 gap-3 mb-5' },
+          kpi('Overdue', overdue.length, 'text-rose-600'),
+          kpi('Due today', today.length, 'text-amber-600'),
+          kpi('Due this week', week.length, 'text-blue-600'),
+          kpi('Later', later.length, 'text-slate-700'),
+        ),
+        el('div', { class: 'flex gap-2 mb-4' },
+          scopeBtn('mine', 'My follow-ups'),
+          (state.me?.role === 'tl' || state.me?.role === 'admin') ? scopeBtn('team', state.me?.role === 'admin' ? 'All' : 'My team') : null
+        ),
+        section('Overdue', overdue, true),
+        section('Due today', today, true),
+        section('Due this week', week, false),
+        section('Later', later, false),
+        !items.length ? el('div', { class: 'bg-white border border-dashed border-slate-300 rounded-lg p-10 text-center text-sm text-slate-500' }, 'No follow-ups scheduled') : null
+      );
+    }
+
+    // ===============================================================
+    // DASHBOARD
+    // ===============================================================
+    let dashCache = null;
+    async function fetchDashboard() {
+      const { data, error } = await supabase.rpc('dashboard_data');
+      if (error) { toast(error.message, 'error'); return; }
+      dashCache = data;
+    }
+
+    function viewDashboard() {
+      if (!dashCache) return el('div', { class: 'text-center text-sm text-slate-500 py-10' }, 'Loading…');
+      const d = dashCache;
+
+      const kpi = (label, val, color) => el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
+        el('div', { class: 'text-xs text-slate-500 font-medium uppercase tracking-wide' }, label),
+        el('div', { class: `text-2xl font-bold mt-1 ${color}` }, val)
+      );
+
+      const kpis = el('div', { class: 'grid grid-cols-2 md:grid-cols-6 gap-3 mb-5' },
+        kpi('Open',          d.kpis?.open_campaigns ?? 0, 'text-slate-900'),
+        kpi('Gone Live',     d.kpis?.gone_live ?? 0,       'text-emerald-600'),
+        kpi('Post Live',     d.kpis?.post_gone_live ?? 0,  'text-emerald-700'),
+        kpi('Dropped',       d.kpis?.dropped ?? 0,         'text-rose-600'),
+        kpi('Spends (₹)',    Number(d.kpis?.total_spends || 0).toLocaleString('en-IN'), 'text-brand'),
+        kpi('Overdue F/U',   d.kpis?.overdue_followups ?? 0, 'text-amber-600'),
+      );
+
+      // Charts placeholders
+      const pieCanvas = el('canvas', { id: 'dash-pipeline', height: 220 });
+      const barCanvas = el('canvas', { id: 'dash-activity', height: 220 });
+
+      const charts = el('div', { class: 'grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5' },
+        el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
+          el('h3', { class: 'text-sm font-semibold mb-3' }, 'Pipeline distribution'),
+          pieCanvas
+        ),
+        el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
+          el('h3', { class: 'text-sm font-semibold mb-3' }, 'Activity — last 30 days'),
+          barCanvas
+        )
+      );
+
+      // Leaderboard
+      const lb = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden' },
+        el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 text-sm font-semibold' }, 'Top contributors — this month'),
+        el('div', { class: 'overflow-x-auto' },
+          el('table', { class: 'w-full text-sm' },
+            el('thead', { class: 'bg-slate-50 text-[11px] uppercase text-slate-500' },
+              el('tr', {},
+                el('th', { class: 'px-3 py-2 text-left' }, 'Name'),
+                el('th', { class: 'px-3 py-2 text-right' }, 'Campaigns touched'),
+                el('th', { class: 'px-3 py-2 text-right' }, 'Activities')
+              )
+            ),
+            el('tbody', {},
+              ...(d.leaderboard || []).map(l => el('tr', { class: 'border-b border-slate-100' },
+                el('td', { class: 'px-3 py-2' }, l.name || '—'),
+                el('td', { class: 'px-3 py-2 text-right' }, String(l.touched || 0)),
+                el('td', { class: 'px-3 py-2 text-right' }, String(l.activities || 0))
+              ))
+            )
+          )
+        )
+      );
+
+      // Defer chart rendering until canvases are in DOM
+      setTimeout(() => {
+        const colors = ['#94a3b8','#3b82f6','#f59e0b','#a855f7','#6366f1','#10b981','#059669','#f43f5e'];
+        if (window.Chart && document.getElementById('dash-pipeline')) {
+          new Chart(document.getElementById('dash-pipeline'), {
+            type: 'doughnut',
+            data: { labels: (d.pipeline || []).map(p => p.group), datasets: [{ data: (d.pipeline || []).map(p => p.count), backgroundColor: colors }] },
+            options: { plugins: { legend: { position: 'right' } } }
+          });
+        }
+        if (window.Chart && document.getElementById('dash-activity')) {
+          new Chart(document.getElementById('dash-activity'), {
+            type: 'bar',
+            data: { labels: (d.daily || []).map(x => x.d), datasets: [{ label: 'Activities', data: (d.daily || []).map(x => x.c), backgroundColor: '#4060f0' }] },
+            options: { plugins: { legend: { display: false } } }
+          });
+        }
+      }, 0);
+
+      return el('div', {}, kpis, charts, lb);
+    }
+
+    // ===============================================================
+    // REPORTS (admin)
+    // ===============================================================
+    const reportsState = { from: null, to: null, data: null };
+    async function fetchReports() {
+      if (!reportsState.from) {
+        const t = new Date(); const f = new Date(t); f.setDate(f.getDate() - 29);
+        reportsState.to = t.toISOString().slice(0, 10);
+        reportsState.from = f.toISOString().slice(0, 10);
+      }
+      const { data, error } = await supabase.rpc('reports_data', { d_from: reportsState.from, d_to: reportsState.to });
+      if (error) { toast(error.message, 'error'); return; }
+      reportsState.data = data;
+    }
+
+    function viewReports() {
+      if (!reportsState.data) return el('div', { class: 'text-center text-sm text-slate-500 py-10' }, 'Loading…');
+      const d = reportsState.data;
+
+      const dateBar = el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4 mb-4 flex flex-wrap items-center gap-3' },
+        el('label', { class: 'text-xs text-slate-600' }, 'From ', el('input', { type: 'date', value: reportsState.from, class: 'ml-1 px-2 py-1 border border-slate-300 rounded',
+          onchange: e => { reportsState.from = e.target.value; } })),
+        el('label', { class: 'text-xs text-slate-600' }, 'To ', el('input', { type: 'date', value: reportsState.to, class: 'ml-1 px-2 py-1 border border-slate-300 rounded',
+          onchange: e => { reportsState.to = e.target.value; } })),
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand', onClick: async () => { await fetchReports(); render(); } }, 'Apply')
+      );
+
+      // Hourly: new scouts vs follow-ups
+      const hourlyCanvas = el('canvas', { id: 'rep-hourly', height: 220 });
+      const hourlyCard = el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4 mb-4' },
+        el('h3', { class: 'text-sm font-semibold mb-3' }, 'Hourly — new scouts vs follow-ups'),
+        hourlyCanvas
+      );
+
+      // Agent daily reachout table
+      const agentDaily = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
+        el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 text-sm font-semibold' }, 'Agent reachout summary'),
+        el('div', { class: 'overflow-x-auto' },
+          el('table', { class: 'w-full text-sm' },
+            el('thead', { class: 'bg-slate-50 text-[11px] uppercase text-slate-500' },
+              el('tr', {},
+                el('th', { class: 'px-3 py-2 text-left' }, 'Agent'),
+                el('th', { class: 'px-3 py-2 text-right' }, 'New scouts'),
+                el('th', { class: 'px-3 py-2 text-right' }, 'Follow-ups'),
+                el('th', { class: 'px-3 py-2 text-right' }, 'Unique campaigns')
+              )
+            ),
+            el('tbody', {},
+              ...(d.agent_daily || []).map(a => el('tr', { class: 'border-b border-slate-100' },
+                el('td', { class: 'px-3 py-2' }, a.full_name || '—'),
+                el('td', { class: 'px-3 py-2 text-right' }, String(a.new_count || 0)),
+                el('td', { class: 'px-3 py-2 text-right' }, String(a.fu_count || 0)),
+                el('td', { class: 'px-3 py-2 text-right' }, String(a.unique_campaigns || 0))
+              ))
+            )
+          )
+        )
+      );
+
+      // Pipeline matrix
+      const matrix = d.pipeline_matrix || [];
+      const groups = Array.from(new Set(matrix.map(m => m.group_status)));
+      const agents = Array.from(new Set(matrix.map(m => m.full_name)));
+      const matrixCard = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
+        el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 text-sm font-semibold' }, 'Pipeline matrix (owner × stage)'),
+        el('div', { class: 'overflow-x-auto' },
+          el('table', { class: 'w-full text-xs' },
+            el('thead', {},
+              el('tr', { class: 'bg-slate-50 text-slate-500 uppercase text-[10px]' },
+                el('th', { class: 'px-2 py-1.5 text-left' }, 'Agent'),
+                ...groups.map(g => el('th', { class: 'px-2 py-1.5 text-right' }, g))
+              )
+            ),
+            el('tbody', {},
+              ...agents.map(a => el('tr', { class: 'border-b border-slate-100' },
+                el('td', { class: 'px-2 py-1.5 font-medium' }, a),
+                ...groups.map(g => {
+                  const cell = matrix.find(m => m.full_name === a && m.group_status === g);
+                  return el('td', { class: 'px-2 py-1.5 text-right' }, cell ? String(cell.cnt) : '—');
+                })
+              ))
+            )
+          )
+        )
+      );
+
+      // L2E conversion
+      const l2eCard = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
+        el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 text-sm font-semibold' }, 'Lead → Live conversion'),
+        el('div', { class: 'overflow-x-auto' },
+          el('table', { class: 'w-full text-sm' },
+            el('thead', { class: 'bg-slate-50 text-[11px] uppercase text-slate-500' },
+              el('tr', {},
+                el('th', { class: 'px-3 py-2 text-left' }, 'Agent'),
+                el('th', { class: 'px-3 py-2 text-right' }, 'Leads (platforms)'),
+                el('th', { class: 'px-3 py-2 text-right' }, 'Conversions (Live+)'),
+                el('th', { class: 'px-3 py-2 text-right' }, 'Rate'),
+              )
+            ),
+            el('tbody', {},
+              ...(d.l2e || []).map(a => {
+                const rate = a.leads ? Math.round(100 * a.conversions / a.leads) : 0;
+                return el('tr', { class: 'border-b border-slate-100' },
+                  el('td', { class: 'px-3 py-2' }, a.full_name || '—'),
+                  el('td', { class: 'px-3 py-2 text-right' }, String(a.leads || 0)),
+                  el('td', { class: 'px-3 py-2 text-right' }, String(a.conversions || 0)),
+                  el('td', { class: 'px-3 py-2 text-right' }, `${rate}%`)
+                );
+              })
+            )
+          )
+        )
+      );
+
+      // Drop reasons
+      const dropCard = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
+        el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 text-sm font-semibold' }, 'Drop reasons'),
+        el('div', { class: 'overflow-x-auto' },
+          el('table', { class: 'w-full text-sm' },
+            el('thead', { class: 'bg-slate-50 text-[11px] uppercase text-slate-500' },
+              el('tr', {},
+                el('th', { class: 'px-3 py-2 text-left' }, 'Sub-status'),
+                el('th', { class: 'px-3 py-2 text-right' }, 'Count'),
+              )
+            ),
+            el('tbody', {},
+              ...(d.drop_reasons || []).map(r => el('tr', { class: 'border-b border-slate-100' },
+                el('td', { class: 'px-3 py-2' }, r.sub_status),
+                el('td', { class: 'px-3 py-2 text-right' }, String(r.cnt || 0))
+              ))
+            )
+          )
+        )
+      );
+
+      setTimeout(() => {
+        if (window.Chart && document.getElementById('rep-hourly')) {
+          const hours = Array.from({length: 24}, (_, i) => i);
+          const newData = hours.map(h => { const e = (d.hourly || []).find(x => x.hr === h); return e ? e.new_count : 0; });
+          const fuData  = hours.map(h => { const e = (d.hourly || []).find(x => x.hr === h); return e ? e.fu_count : 0; });
+          new Chart(document.getElementById('rep-hourly'), {
+            type: 'bar',
+            data: { labels: hours.map(h => `${h}:00`), datasets: [
+              { label: 'New scouts', data: newData, backgroundColor: '#4060f0' },
+              { label: 'Follow-ups', data: fuData, backgroundColor: '#f08000' }
+            ]},
+            options: { responsive: true, scales: { x: { stacked: true }, y: { stacked: true } } }
+          });
+        }
+      }, 0);
+
+      return el('div', {}, dateBar, hourlyCard, agentDaily, matrixCard, l2eCard, dropCard);
+    }
+
+    // ===============================================================
+    // TEAM (admin)
+    // ===============================================================
+    const teamState = { members: [] };
+    async function fetchTeam() {
+      const { data, error } = await supabase.from('team_members').select(`
+        *, team_lead:team_members!team_members_team_lead_id_fkey ( full_name )
+      `).order('created_at', { ascending: true });
+      if (error) { toast(error.message, 'error'); return; }
+      teamState.members = data || [];
+    }
+
+    function viewTeam() {
+      const m = teamState.members;
+      const tls = m.filter(x => x.role === 'tl' && x.is_active);
+
+      const updateRole = async (uid, newRole) => {
+        const { error } = await supabase.from('team_members').update({ role: newRole }).eq('user_id', uid);
+        if (error) return toast(error.message, 'error');
+        await fetchTeam(); render(); toast('Role updated', 'success');
+      };
+      const updateTL = async (uid, tlId) => {
+        const { error } = await supabase.from('team_members').update({ team_lead_id: tlId || null }).eq('user_id', uid);
+        if (error) return toast(error.message, 'error');
+        await fetchTeam(); render(); toast('Team lead updated', 'success');
+      };
+      const updateActive = async (uid, isActive) => {
+        const { error } = await supabase.from('team_members').update({ is_active: isActive }).eq('user_id', uid);
+        if (error) return toast(error.message, 'error');
+        await fetchTeam(); render(); toast('Status updated', 'success');
+      };
+
+      return el('div', {},
+        el('div', { class: 'bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-900' },
+          'Team members appear here after they sign in via Google for the first time. Then you can promote them to TL or admin, assign team leads, or deactivate.'
+        ),
+        el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden' },
+          el('div', { class: 'overflow-x-auto' },
+            el('table', { class: 'w-full text-sm' },
+              el('thead', { class: 'bg-slate-50 text-[11px] uppercase text-slate-500' },
+                el('tr', {},
+                  el('th', { class: 'px-3 py-2 text-left' }, 'Name'),
+                  el('th', { class: 'px-3 py-2 text-left' }, 'Email'),
+                  el('th', { class: 'px-3 py-2 text-left' }, 'Role'),
+                  el('th', { class: 'px-3 py-2 text-left' }, 'Team Lead'),
+                  el('th', { class: 'px-3 py-2 text-center' }, 'Active'),
+                  el('th', { class: 'px-3 py-2' }, '')
+                )
+              ),
+              el('tbody', {},
+                ...m.map(x => el('tr', { class: 'border-b border-slate-100' },
+                  el('td', { class: 'px-3 py-2' }, x.full_name || '—'),
+                  el('td', { class: 'px-3 py-2 text-xs text-slate-600' }, x.email),
+                  el('td', { class: 'px-3 py-2' },
+                    el('select', { class: 'px-2 py-1 text-sm border border-slate-300 rounded',
+                      onchange: e => updateRole(x.user_id, e.target.value) },
+                      ...['user','tl','admin'].map(r => el('option', { value: r, selected: x.role === r }, r))
+                    )
+                  ),
+                  el('td', { class: 'px-3 py-2' },
+                    x.role === 'user' ? el('select', { class: 'px-2 py-1 text-sm border border-slate-300 rounded',
+                      onchange: e => updateTL(x.user_id, e.target.value) },
+                      el('option', { value: '' }, '—'),
+                      ...tls.map(t => el('option', { value: t.user_id, selected: x.team_lead_id === t.user_id }, t.full_name || t.email))
+                    ) : el('span', { class: 'text-xs text-slate-400' }, '—')
+                  ),
+                  el('td', { class: 'px-3 py-2 text-center' },
+                    el('input', { type: 'checkbox', checked: x.is_active, onchange: e => updateActive(x.user_id, e.target.checked) })
+                  ),
+                  el('td', { class: 'px-3 py-2 text-xs text-slate-400' }, fmtDate(x.created_at))
+                ))
+              )
+            )
+          )
+        )
+      );
+    }
+
+    // ===============================================================
+    // CSV EXPORT (campaigns) and IMPORT (profiles+platforms)
+    // ===============================================================
+    async function exportCampaignsCSV() {
+      // Apply same filters but page through all
+      const L = state.lists.campaigns;
+      let q = supabase.from('campaigns').select(`
+        id, name, sub_status, group_status, gone_live_date, spends_inr, utm_link, utm_content, is_recollab, rcb_count,
+        next_followup_at, updated_at, created_at,
+        platform:platforms!inner ( platform, username, profile:profiles!inner ( name, email, phone, region, lead_type ) ),
+        owner:team_members!campaigns_owner_id_fkey ( full_name )
+      `).limit(5000);
+      if (L.filters.group_status) q = q.eq('group_status', L.filters.group_status);
+      if (L.filters.sub_status)   q = q.eq('sub_status', L.filters.sub_status);
+      if (L.filters.owner_id)     q = q.eq('owner_id', L.filters.owner_id);
+      if (L.filters.platform)     q = q.eq('platforms.platform', L.filters.platform);
+
+      const { data, error } = await q.order('updated_at', { ascending: false });
+      if (error) { toast(error.message, 'error'); return; }
+
+      const csv = toCSV(data || [], [
+        { label: 'Campaign',     value: r => r.name },
+        { label: 'Influencer',   value: r => r.platform?.profile?.name },
+        { label: 'Lead Type',    value: r => r.platform?.profile?.lead_type },
+        { label: 'Email',        value: r => r.platform?.profile?.email },
+        { label: 'Phone',        value: r => r.platform?.profile?.phone },
+        { label: 'Region',       value: r => r.platform?.profile?.region },
+        { label: 'Platform',     value: r => r.platform?.platform },
+        { label: 'Username',     value: r => r.platform?.username },
+        { label: 'Sub-status',   value: r => r.sub_status },
+        { label: 'Group Status', value: r => r.group_status },
+        { label: 'Owner',        value: r => r.owner?.full_name },
+        { label: 'Gone Live Date', value: r => r.gone_live_date },
+        { label: 'Spends (INR)', value: r => r.spends_inr },
+        { label: 'UTM Content',  value: r => r.utm_content },
+        { label: 'RCB?',         value: r => r.is_recollab },
+        { label: 'RCB Count',    value: r => r.rcb_count },
+        { label: 'Next Follow-up', value: r => r.next_followup_at },
+        { label: 'Updated',      value: r => r.updated_at },
+      ]);
+      downloadCSV(`campaigns-${new Date().toISOString().slice(0,10)}.csv`, csv);
+      toast(`Exported ${(data || []).length} rows`, 'success');
+    }
+
+    function openImportCSVModal() {
+      const sampleHeaders = ['lead_type','name','email','phone','region','languages','platform','username','link','genre','avg_views','followers'];
+      const fileInp = el('input', { type: 'file', accept: '.csv', class: 'w-full text-xs' });
+      const summary = el('div', { class: 'text-xs text-slate-600 space-y-1' });
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand', disabled: true }, 'Import');
+
+      let parsed = null;
+      fileInp.addEventListener('change', () => {
+        const f = fileInp.files[0];
+        if (!f) return;
+        const r = new FileReader();
+        r.onload = () => {
+          const rows = parseCSV(r.result);
+          if (!rows.length) { summary.innerHTML = 'Empty CSV'; return; }
+          const headers = rows[0].map(h => h.trim().toLowerCase());
+          const body = rows.slice(1);
+          parsed = { headers, body };
+          summary.innerHTML = `Found <b>${body.length}</b> rows. Columns: ${headers.join(', ')}`;
+          submitBtn.disabled = false;
+        };
+        r.readAsText(f);
+      });
+
+      submitBtn.addEventListener('click', async () => {
+        if (!parsed) return;
+        submitBtn.disabled = true; submitBtn.textContent = 'Importing…';
+        const { headers, body } = parsed;
+        const idx = (n) => headers.indexOf(n);
+        let ok = 0, fail = 0, errs = [];
+        for (const row of body) {
+          const get = (n) => idx(n) >= 0 ? row[idx(n)]?.trim() : '';
+          const profilePayload = {
+            lead_type: get('lead_type') || 'DM',
+            name:      get('name'),
+            email:     get('email') || null,
+            phone:     get('phone') || null,
+            region:    get('region') || null,
+            languages: get('languages') ? get('languages').split(';').map(s => s.trim()).filter(Boolean) : null,
+            created_by: state.me.user_id,
+          };
+          const platformPayload = {
+            platform:   get('platform'),
+            username:   get('username'),
+            link:       get('link') || null,
+            genre:      get('genre') || null,
+            avg_views:  get('avg_views') ? parseInt(get('avg_views')) : null,
+            followers:  get('followers') ? parseInt(get('followers')) : null,
+            created_by: state.me.user_id,
+          };
+          if (!profilePayload.name || !platformPayload.platform || !platformPayload.username) {
+            fail++; errs.push(`Missing required fields: ${profilePayload.name || '?'}`); continue;
+          }
+          const { data: p, error: pe } = await supabase.from('profiles').insert(profilePayload).select().single();
+          if (pe) { fail++; errs.push(`${profilePayload.name}: ${pe.message}`); continue; }
+          platformPayload.profile_id = p.id;
+          const { error: ple } = await supabase.from('platforms').insert(platformPayload);
+          if (ple) {
+            await supabase.from('profiles').delete().eq('id', p.id);
+            fail++; errs.push(`${profilePayload.name}: ${ple.message}`); continue;
+          }
+          ok++;
+        }
+        modal.close();
+        toast(`Imported ${ok}, failed ${fail}`, fail ? 'error' : 'success');
+        if (errs.length) console.warn('Import errors:', errs);
+        if (state.route === 'campaigns') { await fetchCampaigns(); render(); }
+      });
+
+      const wrap = el('div', { class: 'space-y-3' },
+        el('p', { class: 'text-xs text-slate-600' }, 'CSV columns expected (case-insensitive). Languages can be semicolon-separated. Required: name, platform, username.'),
+        el('p', { class: 'text-[11px] font-mono bg-slate-100 px-2 py-1 rounded break-all' }, sampleHeaders.join(',')),
+        fileInp,
+        summary,
+        el('div', { class: 'flex justify-end gap-2 pt-2' },
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+          submitBtn
+        )
+      );
+      const modal = renderModal('Import CSV', wrap);
     }
 
     // ===============================================================
@@ -817,7 +1407,7 @@
       };
       fields.sub_status.addEventListener('change', renderConditional);
 
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700' }, 'Save status change');
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Save status change');
       submitBtn.addEventListener('click', async () => {
         const target = fields.sub_status.value;
         if (!target) return toast('Pick a sub-status', 'error');
@@ -1023,7 +1613,7 @@
       renderConditional();
 
       // --- Submit ---
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700' }, 'Save');
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Save');
       submitBtn.addEventListener('click', async () => {
         const target = fields.sub_status?.value || '';
         const map = state.filterOptions?.sub_statuses || [];
@@ -1107,7 +1697,7 @@
         ...(state.filterOptions?.owners || []).map(o => el('option', { value: o.id, selected: c.owner_id === o.id }, o.name || '—'))
       );
       wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, 'New Owner *'), sel));
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700' }, 'Reassign');
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Reassign');
       submitBtn.addEventListener('click', async () => {
         submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
         const { error } = await supabase.from('campaigns').update({ owner_id: sel.value }).eq('id', c.id);
@@ -1148,7 +1738,7 @@
           ),
         ),
         el('div', { class: 'flex flex-wrap gap-2' },
-          !isTerminal && canEdit ? el('button', { class: 'px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700', onClick: () => openLogActivityModal(c) }, '+ Log Activity / Update Stage') : null,
+          !isTerminal && canEdit ? el('button', { class: 'px-3 py-1.5 text-sm btn-brand rounded-md', onClick: () => openLogActivityModal(c) }, '+ Log Activity / Update Stage') : null,
           canEdit ? el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-md hover:bg-slate-50', onClick: () => openReassignModal(c) }, 'Reassign') : null,
         )
       );
@@ -1279,7 +1869,7 @@
             el('span', { class: 'text-xs text-slate-500' }, 'Created by ' + (p.owner?.full_name || '—'))
           )
         ),
-        el('button', { class: 'px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700',
+        el('button', { class: 'px-3 py-1.5 text-sm btn-brand rounded-md',
           onClick: () => openAddPlatformModal(p) }, '+ Add Platform')
       );
 
@@ -1346,10 +1936,10 @@
     const ROUTES = {
       campaigns: { label: 'Campaigns', icon: '🎯', view: viewCampaigns, prefetch: fetchCampaigns },
       profiles:  { label: 'Profiles',  icon: '👤', view: viewProfiles,  prefetch: fetchProfiles },
-      followups: { label: 'Follow-ups', icon: '⏰', view: () => viewPlaceholder('Follow-ups', 'Coming in step 4.') },
-      dashboard: { label: 'Dashboard',  icon: '📊', view: () => viewPlaceholder('Dashboard', 'Coming in step 4.') },
-      reports:   { label: 'Reports',    icon: '📈', view: () => viewPlaceholder('Reports', 'Coming in step 4.'), adminOnly: true },
-      team:      { label: 'Team',       icon: '👥', view: () => viewPlaceholder('Team Management', 'Coming in step 4.'), adminOnly: true },
+      followups: { label: 'Follow-ups', icon: '⏰', view: viewFollowups, prefetch: fetchFollowups },
+      dashboard: { label: 'Dashboard',  icon: '📊', view: viewDashboard, prefetch: fetchDashboard },
+      reports:   { label: 'Reports',    icon: '📈', view: viewReports,   prefetch: fetchReports, adminOnly: true },
+      team:      { label: 'Team',       icon: '👥', view: viewTeam,      prefetch: fetchTeam,    adminOnly: true },
     };
 
     function parseRoute() {
@@ -1377,19 +1967,18 @@
       }
 
       const sidebar = el('aside', { id: 'sidebar', class: 'sidebar-mobile md:translate-x-0 fixed md:static z-30 inset-y-0 left-0 w-64 bg-slate-900 text-slate-100 flex flex-col' },
-        el('div', { class: 'px-5 py-4 border-b border-slate-800 flex items-center justify-between' },
-          el('div', {},
-            el('div', { class: 'text-sm font-bold' }, 'Influencer CRM'),
-            el('div', { class: 'text-[11px] text-slate-400' }, 'BrightChamps')
-          ),
-          el('button', { class: 'md:hidden text-slate-400', onClick: () => $('#sidebar').classList.remove('open') }, '×')
+        el('div', { class: 'px-4 py-4 border-b border-slate-800 flex items-center justify-between bg-white' },
+          el('img', { src: 'data:image/png;base64,' + LOGO_B64, alt: 'BrightChamps', class: 'h-10 w-auto' }),
+          el('button', { class: 'md:hidden text-slate-500', onClick: () => $('#sidebar').classList.remove('open') }, '×')
         ),
+        el('div', { class: 'px-4 py-2 border-b border-slate-800 text-[11px] text-slate-400 uppercase tracking-wide' }, 'Influencer CRM'),
         el('nav', { class: 'flex-1 px-2 py-3 space-y-1' },
           ...Object.entries(ROUTES)
             .filter(([k, r]) => !r.adminOnly || state.me?.role === 'admin')
             .map(([k, r]) => el('a', {
               href: '#' + k,
-              class: `flex items-center gap-2 px-3 py-2 text-sm rounded-md ${state.route === k ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800/60'}`
+              class: `flex items-center gap-2 px-3 py-2 text-sm rounded-md ${state.route === k ? 'text-white' : 'text-slate-300 hover:bg-slate-800/60'}`,
+              style: state.route === k ? 'background-color: var(--brand);' : ''
             },
               el('span', { class: 'text-base' }, r.icon),
               el('span', {}, r.label)
@@ -1475,10 +2064,11 @@
       $('#app').appendChild(
         el('div', { class: 'min-h-screen flex items-center justify-center p-4 bg-slate-50' },
           el('div', { class: 'bg-white border border-slate-200 rounded-xl shadow-sm p-8 w-full max-w-sm text-center' },
-            el('div', { class: 'text-2xl font-bold text-slate-900 mb-1' }, 'Influencer CRM'),
-            el('div', { class: 'text-sm text-slate-500 mb-6' }, 'BrightChamps'),
+            el('img', { src: 'data:image/png;base64,' + LOGO_B64, alt: 'BrightChamps', class: 'h-12 w-auto mx-auto mb-4' }),
+            el('div', { class: 'text-lg font-semibold text-slate-900 mb-1' }, 'Influencer CRM'),
+            el('div', { class: 'text-sm text-slate-500 mb-6' }, 'Sign in to continue'),
             el('button', {
-              class: 'w-full px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 flex items-center justify-center gap-2',
+              class: 'w-full px-4 py-2.5 btn-brand text-sm font-medium rounded-md flex items-center justify-center gap-2',
               onClick: signIn
             }, '🔐  Sign in with Google'),
             el('p', { class: 'text-[11px] text-slate-400 mt-4' }, `Restricted to @${ALLOWED_DOMAIN} accounts`)
