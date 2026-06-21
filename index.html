@@ -1968,7 +1968,7 @@
 
       const sidebar = el('aside', { id: 'sidebar', class: 'sidebar-mobile md:translate-x-0 fixed md:static z-30 inset-y-0 left-0 w-64 bg-white border-r border-slate-200 flex flex-col' },
         el('div', { class: 'px-6 py-5 border-b border-slate-200 flex items-center justify-between' },
-          el('img', { src: 'data:image/png;base64,' + LOGO_B64, alt: 'BrightChamps', class: 'h-14 w-auto' }),
+          el('img', { src: 'data:image/png;base64,' + LOGO_B64, alt: 'BrightChamps', class: 'h-[100px] w-auto' }),
           el('button', { class: 'md:hidden text-slate-500 text-2xl leading-none', onClick: () => $('#sidebar').classList.remove('open') }, '×')
         ),
         el('div', { class: 'px-6 pt-4 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest' }, 'Influencer CRM'),
@@ -2074,7 +2074,7 @@
       $('#app').appendChild(
         el('div', { class: 'min-h-screen flex items-center justify-center p-4 bg-slate-50' },
           el('div', { class: 'bg-white border border-slate-200 rounded-xl shadow-sm p-8 w-full max-w-sm text-center' },
-            el('img', { src: 'data:image/png;base64,' + LOGO_B64, alt: 'BrightChamps', class: 'h-12 w-auto mx-auto mb-4' }),
+            el('img', { src: 'data:image/png;base64,' + LOGO_B64, alt: 'BrightChamps', class: 'h-[88px] w-auto mx-auto mb-4' }),
             el('div', { class: 'text-lg font-semibold text-slate-900 mb-1' }, 'Influencer CRM'),
             el('div', { class: 'text-sm text-slate-500 mb-6' }, 'Sign in to continue'),
             el('button', {
