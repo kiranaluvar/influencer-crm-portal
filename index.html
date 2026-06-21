@@ -1966,28 +1966,38 @@
         body = r.view();
       }
 
-      const sidebar = el('aside', { id: 'sidebar', class: 'sidebar-mobile md:translate-x-0 fixed md:static z-30 inset-y-0 left-0 w-64 bg-slate-900 text-slate-100 flex flex-col' },
-        el('div', { class: 'px-4 py-4 border-b border-slate-800 flex items-center justify-between bg-white' },
-          el('img', { src: 'data:image/png;base64,' + LOGO_B64, alt: 'BrightChamps', class: 'h-10 w-auto' }),
-          el('button', { class: 'md:hidden text-slate-500', onClick: () => $('#sidebar').classList.remove('open') }, '×')
+      const sidebar = el('aside', { id: 'sidebar', class: 'sidebar-mobile md:translate-x-0 fixed md:static z-30 inset-y-0 left-0 w-64 bg-white border-r border-slate-200 flex flex-col' },
+        el('div', { class: 'px-6 py-5 border-b border-slate-200 flex items-center justify-between' },
+          el('img', { src: 'data:image/png;base64,' + LOGO_B64, alt: 'BrightChamps', class: 'h-14 w-auto' }),
+          el('button', { class: 'md:hidden text-slate-500 text-2xl leading-none', onClick: () => $('#sidebar').classList.remove('open') }, '×')
         ),
-        el('div', { class: 'px-4 py-2 border-b border-slate-800 text-[11px] text-slate-400 uppercase tracking-wide' }, 'Influencer CRM'),
-        el('nav', { class: 'flex-1 px-2 py-3 space-y-1' },
+        el('div', { class: 'px-6 pt-4 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest' }, 'Influencer CRM'),
+        el('nav', { class: 'flex-1 px-3 pb-3 space-y-0.5' },
           ...Object.entries(ROUTES)
             .filter(([k, r]) => !r.adminOnly || state.me?.role === 'admin')
-            .map(([k, r]) => el('a', {
-              href: '#' + k,
-              class: `flex items-center gap-2 px-3 py-2 text-sm rounded-md ${state.route === k ? 'text-white' : 'text-slate-300 hover:bg-slate-800/60'}`,
-              style: state.route === k ? 'background-color: var(--brand);' : ''
-            },
-              el('span', { class: 'text-base' }, r.icon),
-              el('span', {}, r.label)
-            ))
+            .map(([k, r]) => {
+              const active = state.route === k;
+              return el('a', {
+                href: '#' + k,
+                class: `flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-colors ${active ? 'text-white font-medium' : 'text-slate-700 hover:bg-slate-100'}`,
+                style: active ? 'background-color: var(--brand);' : ''
+              },
+                el('span', { class: 'text-base' }, r.icon),
+                el('span', {}, r.label)
+              );
+            })
         ),
-        el('div', { class: 'px-3 py-3 border-t border-slate-800' },
-          el('div', { class: 'text-xs text-slate-400' }, state.me?.full_name || state.session.user.email),
-          el('div', { class: 'text-[10px] text-slate-500 uppercase tracking-wide mb-2' }, state.me?.role || 'user'),
-          el('button', { class: 'w-full text-xs text-slate-300 hover:text-white border border-slate-700 rounded px-2 py-1', onClick: signOut }, 'Sign out')
+        el('div', { class: 'px-4 py-3 border-t border-slate-200 bg-slate-50' },
+          el('div', { class: 'flex items-center gap-2 mb-2' },
+            el('div', { class: 'w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold', style: 'background-color: var(--brand);' },
+              (state.me?.full_name || state.session.user.email || '?').charAt(0).toUpperCase()
+            ),
+            el('div', { class: 'flex-1 min-w-0' },
+              el('div', { class: 'text-xs font-medium text-slate-800 truncate' }, state.me?.full_name || state.session.user.email),
+              el('div', { class: 'text-[10px] text-slate-500 uppercase tracking-wide' }, state.me?.role || 'user')
+            )
+          ),
+          el('button', { class: 'w-full text-xs text-slate-600 hover:text-slate-900 border border-slate-300 hover:border-slate-400 rounded px-2 py-1.5 bg-white transition-colors', onClick: signOut }, 'Sign out')
         )
       );
 
@@ -1997,12 +2007,12 @@
         el('div', { class: 'w-6' })
       );
 
-      const main = el('main', { class: 'flex-1 overflow-y-auto scrollbar-thin' },
+      const main = el('main', { class: 'flex-1 overflow-y-auto scrollbar-thin bg-slate-50' },
         header,
-        el('div', { class: 'p-4 md:p-6 max-w-screen-2xl mx-auto' },
-          el('div', { class: 'hidden md:flex items-center justify-between mb-5' },
-            el('h1', { class: 'text-xl font-semibold text-slate-900' }, ROUTES[state.route]?.label),
-            el('div', { class: 'text-xs text-slate-500' }, state.me?.full_name + ' · ' + (state.me?.role || 'user'))
+        el('div', { class: 'p-4 md:p-8 max-w-screen-2xl mx-auto' },
+          el('div', { class: 'hidden md:flex items-center justify-between mb-6' },
+            el('h1', { class: 'text-2xl font-semibold text-slate-900' }, ROUTES[state.route]?.label),
+            el('div', { class: 'text-sm text-slate-500' }, state.me?.full_name + ' · ' + (state.me?.role || 'user'))
           ),
           body
         )
