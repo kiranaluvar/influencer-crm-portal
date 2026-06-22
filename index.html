@@ -82,6 +82,7 @@
         profiles:  { items: [], page: 1, total: 0, search: '', filters: {} },
       },
       detail: { campaign: null, profile: null, activities: [], audit: [], loading: false },
+      overdueCount: 0,
     };
 
     // ===============================================================
@@ -211,7 +212,7 @@
       const m = renderModal('Confirm', el('div', { class: 'space-y-4' },
         el('p', { class: 'text-sm text-slate-600' }, msg),
         el('div', { class: 'flex justify-end gap-2' },
-          el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => { m.close(); res(false); } }, 'Cancel'),
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => { m.close(); res(false); } }, 'Cancel'),
           el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-slate-900 text-white hover:bg-slate-800', onClick: () => { m.close(); res(true); } }, 'Confirm')
         )
       ));
@@ -267,6 +268,14 @@
       if (error) { console.error(error); return null; }
       state.filterOptions = data;
       return data;
+    }
+
+    async function refreshOverdueCount() {
+      const { count } = await supabase.from('campaigns').select('id', { count: 'exact', head: true })
+        .eq('owner_id', state.me.user_id)
+        .lt('next_followup_at', new Date().toISOString())
+        .not('group_status', 'in', '("Dropped","Post Gone Live")');
+      state.overdueCount = count || 0;
     }
 
     // ===============================================================
@@ -337,9 +346,9 @@
     function renderModal(title, content) {
       const backdrop = el('div', { class: 'fixed inset-0 z-40 modal-backdrop flex items-center justify-center p-4 fade-in' });
       const modal = el('div', { class: 'bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col' },
-        el('div', { class: 'px-5 py-3 border-b border-slate-200 flex items-center justify-between' },
-          el('h3', { class: 'font-semibold text-slate-900' }, title),
-          el('button', { class: 'text-slate-400 hover:text-slate-700 text-xl leading-none', onClick: () => close() }, '×')
+        el('div', { class: 'px-5 py-3.5 border-b border-slate-200 flex items-center justify-between' },
+          el('h3', { class: 'font-semibold text-[15px] text-slate-900 tracking-tight' }, title),
+          el('button', { class: 'text-slate-400 hover:text-slate-700 text-2xl leading-none', onClick: () => close() }, '×')
         ),
         el('div', { class: 'p-5 overflow-y-auto scrollbar-thin' }, content)
       );
@@ -359,12 +368,12 @@
       const mkField = (label, name, type = 'text', opts = {}) => {
         const wrap = el('label', { class: 'block' },
           el('span', { class: 'text-xs font-medium text-slate-600' }, label + (opts.required ? ' *' : '')),
-          fields[name] = el('input', { type, name, placeholder: opts.placeholder || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' })
+          fields[name] = el('input', { type, name, placeholder: opts.placeholder || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' })
         );
         return wrap;
       };
       const mkSelect = (label, name, options, opts = {}) => {
-        const sel = el('select', { name, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' },
+        const sel = el('select', { name, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' },
           el('option', { value: '' }, '— Select —'),
           ...options.map(o => el('option', { value: o }, o))
         );
@@ -381,7 +390,7 @@
       const phoneWrap    = mkField('Phone', 'phone', 'tel');
 
       // Region: searchable country dropdown
-      const regionSel = el('select', { name: 'region', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' },
+      const regionSel = el('select', { name: 'region', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' },
         el('option', { value: '' }, '— Select country —'),
         ...COUNTRIES.map(c => el('option', { value: c }, c))
       );
@@ -403,7 +412,7 @@
       );
 
       // PLATFORM SECTION (mandatory — source of the lead)
-      const platSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' },
+      const platSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' },
         el('option', { value: '' }, '— Select —'),
         ...['Instagram','Youtube','Facebook','Tiktok'].map(p => el('option', { value: p }, p))
       );
@@ -492,7 +501,7 @@
       ].forEach(f => form.appendChild(f));
 
       form.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-slate-200' },
-        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
         submitBtn
       ));
       const modal = renderModal('Add Influencer Profile + Platform', form);
@@ -505,7 +514,7 @@
       const form = el('div', { class: 'space-y-3' });
       const fields = {};
       const mkField = (label, name, type = 'text', opts = {}) => {
-        const inp = el('input', { type, name, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' });
+        const inp = el('input', { type, name, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
         fields[name] = inp;
         return el('label', { class: 'block' },
           el('span', { class: 'text-xs font-medium text-slate-600' }, label + (opts.required ? ' *' : '')),
@@ -513,7 +522,7 @@
         );
       };
 
-      const platSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500' },
+      const platSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' },
         el('option', { value: '' }, '— Select —'),
         ...['Instagram','Youtube','Facebook','Tiktok'].map(p => el('option', { value: p }, p))
       );
@@ -558,7 +567,7 @@
       });
 
       form.appendChild(el('div', { class: 'flex justify-end gap-2 pt-2' },
-        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
         submitBtn
       ));
       const modal = renderModal('Add Platform', form);
@@ -753,6 +762,102 @@
         el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' }, searchInp, ltSel, ownerSel),
         table, pag
       );
+    }
+
+    // ===============================================================
+    // EDIT PROFILE / EDIT PLATFORM
+    // ===============================================================
+    function openEditProfileModal(p, onSaved) {
+      const fields = {};
+      const wrap = el('div', { class: 'space-y-3' });
+
+      fields.name = el('input', { type: 'text', value: p.name || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
+      fields.email = el('input', { type: 'email', value: p.email || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
+      fields.phone = el('input', { type: 'tel', value: p.phone || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
+      fields.region = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' },
+        el('option', { value: '' }, '— Select country —'),
+        ...COUNTRIES.map(c => el('option', { value: c, selected: p.region === c }, c))
+      );
+      const currentLangs = new Set(p.languages || []);
+      const langBoxes = LANGUAGES.map(l => {
+        const cb = el('input', { type: 'checkbox', value: l, checked: currentLangs.has(l), class: 'rounded border-slate-300 text-blue-600 focus:ring-blue-500' });
+        return el('label', { class: 'inline-flex items-center gap-1 text-xs px-2 py-1 border border-slate-200 rounded bg-slate-50 cursor-pointer hover:bg-slate-100' }, cb, l);
+      });
+      fields.languages = langBoxes;
+      fields.lead_type = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' },
+        ...['Phone','Email','DM'].map(t => el('option', { value: t, selected: p.lead_type === t }, t))
+      );
+      const mk = (label, inp) => el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, label), inp);
+      wrap.appendChild(mk('Name *', fields.name));
+      wrap.appendChild(mk('Email', fields.email));
+      wrap.appendChild(mk('Phone', fields.phone));
+      wrap.appendChild(mk('Region', fields.region));
+      wrap.appendChild(el('div', {}, el('span', { class: 'text-xs font-medium text-slate-600 block mb-1' }, 'Languages'), el('div', { class: 'flex flex-wrap gap-1.5' }, ...langBoxes)));
+      wrap.appendChild(mk('Lead Type', fields.lead_type));
+
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Save changes');
+      submitBtn.addEventListener('click', async () => {
+        const checkedLangs = fields.languages.filter(cb => cb.querySelector('input').checked).map(cb => cb.querySelector('input').value);
+        const payload = {
+          name: fields.name.value.trim(), email: fields.email.value.trim() || null, phone: fields.phone.value.trim() || null,
+          region: fields.region.value || null, languages: checkedLangs.length ? checkedLangs : null, lead_type: fields.lead_type.value,
+        };
+        if (!payload.name) return toast('Name is required', 'error');
+        submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
+        const { error } = await supabase.from('profiles').update(payload).eq('id', p.id);
+        submitBtn.disabled = false; submitBtn.textContent = 'Save changes';
+        if (error) return toast(error.message, 'error');
+        modal.close();
+        toast('Profile updated', 'success');
+        if (onSaved) await onSaved();
+      });
+
+      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-slate-200' },
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+        submitBtn
+      ));
+      const modal = renderModal('Edit Profile', wrap);
+    }
+
+    function openEditPlatformModal(pl, onSaved) {
+      const fields = {};
+      const wrap = el('div', { class: 'space-y-3' });
+      fields.username  = el('input', { type: 'text', value: pl.username || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
+      fields.link      = el('input', { type: 'url', value: pl.link || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
+      fields.genre     = el('input', { type: 'text', value: pl.genre || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
+      fields.avg_views = el('input', { type: 'number', value: pl.avg_views || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
+      fields.followers = el('input', { type: 'number', value: pl.followers || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
+      const mk = (label, inp) => el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, label), inp);
+      wrap.appendChild(el('div', { class: 'text-xs px-2 py-1.5 bg-slate-100 rounded text-slate-700' }, `${pl.platform} platform`));
+      wrap.appendChild(mk('Username *', fields.username));
+      wrap.appendChild(mk('Profile Link', fields.link));
+      wrap.appendChild(mk('Genre', fields.genre));
+      wrap.appendChild(mk('Avg Views (last 10 collabs)', fields.avg_views));
+      wrap.appendChild(mk('Followers', fields.followers));
+
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Save changes');
+      submitBtn.addEventListener('click', async () => {
+        const payload = {
+          username: fields.username.value.trim(), link: fields.link.value.trim() || null,
+          genre: fields.genre.value.trim() || null,
+          avg_views: fields.avg_views.value ? parseInt(fields.avg_views.value) : null,
+          followers: fields.followers.value ? parseInt(fields.followers.value) : null,
+        };
+        if (!payload.username) return toast('Username is required', 'error');
+        submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
+        const { error } = await supabase.from('platforms').update(payload).eq('id', pl.id);
+        submitBtn.disabled = false; submitBtn.textContent = 'Save changes';
+        if (error) return toast(error.message, 'error');
+        modal.close();
+        toast('Platform updated', 'success');
+        if (onSaved) await onSaved();
+      });
+
+      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-slate-200' },
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+        submitBtn
+      ));
+      const modal = renderModal(`Edit ${pl.platform} platform`, wrap);
     }
 
     // ===============================================================
@@ -1332,7 +1437,7 @@
         fileInp,
         summary,
         el('div', { class: 'flex justify-end gap-2 pt-2' },
-          el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
           submitBtn
         )
       );
@@ -1576,7 +1681,7 @@
       ));
       wrap.appendChild(conditionalArea);
       wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 border-t border-slate-200' },
-        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
         submitBtn
       ));
 
@@ -1789,7 +1894,7 @@
       });
 
       wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-3 border-t border-slate-200' },
-        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
         submitBtn
       ));
 
@@ -1816,7 +1921,7 @@
         render();
       });
       wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-2' },
-        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-300 hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
         submitBtn
       ));
       const modal = renderModal('Reassign Campaign Owner', wrap);
@@ -1867,9 +1972,9 @@
           el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Influencer'),
           el('div', { class: 'text-sm font-medium' }, el('a', { href: `#profiles/${p.id}`, class: 'hover:underline text-blue-600' }, p.name)),
           el('div', { class: 'mt-2 space-y-1 text-xs text-slate-600' },
-            p.email ? el('div', {}, '✉ ', el('a', { href: `mailto:${p.email}`, class: 'text-blue-600 hover:underline' }, p.email)) : null,
+            p.email ? el('div', {}, '✉ ', el('a', { href: `mailto:${p.email}`, class: 'text-brand hover:underline' }, p.email)) : null,
             p.phone ? el('div', {}, '📞 ',
-              el('a', { href: `tel:${p.phone}`, class: 'text-blue-600 hover:underline mr-2' }, p.phone),
+              el('a', { href: `tel:${p.phone}`, class: 'text-brand hover:underline mr-2' }, p.phone),
               el('a', { href: `sms:${p.phone}`, class: 'text-slate-500 hover:underline mr-2' }, 'SMS'),
               el('a', { href: `https://wa.me/${p.phone.replace(/\D/g,'')}`, target: '_blank', class: 'text-emerald-600 hover:underline' }, 'WhatsApp')
             ) : null,
@@ -1882,7 +1987,7 @@
           el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Platform'),
           el('div', { class: 'text-sm font-medium' }, `${pl.platform} · @${pl.username}`),
           el('div', { class: 'mt-2 space-y-1 text-xs text-slate-600' },
-            pl.link ? el('div', {}, '🔗 ', el('a', { href: pl.link, target: '_blank', class: 'text-blue-600 hover:underline break-all' }, pl.link)) : null,
+            pl.link ? el('div', {}, '🔗 ', el('a', { href: pl.link, target: '_blank', class: 'text-brand hover:underline break-all' }, pl.link)) : null,
             pl.genre ? el('div', {}, 'Genre: ', pl.genre) : null,
             pl.followers != null ? el('div', {}, 'Followers: ', pl.followers.toLocaleString()) : null,
             pl.avg_views != null ? el('div', {}, 'Avg views: ', pl.avg_views.toLocaleString()) : null,
@@ -1905,10 +2010,10 @@
           el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Documents'),
           el('div', { class: 'space-y-2 text-sm' },
             c.agreement_file_url
-              ? el('div', {}, '📎 Agreement: ', el('button', { class: 'text-blue-600 hover:underline', onClick: async () => { const u = await signedUrl(c.agreement_file_url); if (u) window.open(u, '_blank'); } }, 'View'))
+              ? el('div', {}, '📎 Agreement: ', el('button', { class: 'text-brand hover:underline', onClick: async () => { const u = await signedUrl(c.agreement_file_url); if (u) window.open(u, '_blank'); } }, 'View'))
               : el('div', { class: 'text-xs text-slate-400' }, 'No agreement uploaded'),
             c.invoice_file_url
-              ? el('div', {}, '🧾 Invoice: ', el('button', { class: 'text-blue-600 hover:underline', onClick: async () => { const u = await signedUrl(c.invoice_file_url); if (u) window.open(u, '_blank'); } }, 'View'))
+              ? el('div', {}, '🧾 Invoice: ', el('button', { class: 'text-brand hover:underline', onClick: async () => { const u = await signedUrl(c.invoice_file_url); if (u) window.open(u, '_blank'); } }, 'View'))
               : el('div', { class: 'text-xs text-slate-400' }, 'No invoice uploaded')
           )
         )
@@ -1920,11 +2025,11 @@
         el('div', { class: 'grid grid-cols-2 gap-2 text-xs' },
           el('div', {}, el('span', { class: 'text-slate-500' }, 'Date: '), fmtDate(c.gone_live_date)),
           el('div', {}, el('span', { class: 'text-slate-500' }, 'Spends: '), c.spends_inr ? `₹${c.spends_inr}` : '—'),
-          el('div', { class: 'col-span-2' }, el('span', { class: 'text-slate-500' }, 'UTM Link: '), c.utm_link ? el('a', { href: c.utm_link, target: '_blank', class: 'text-blue-600 hover:underline break-all' }, c.utm_link) : '—'),
+          el('div', { class: 'col-span-2' }, el('span', { class: 'text-slate-500' }, 'UTM Link: '), c.utm_link ? el('a', { href: c.utm_link, target: '_blank', class: 'text-brand hover:underline break-all' }, c.utm_link) : '—'),
           el('div', {}, el('span', { class: 'text-slate-500' }, 'UTM Content: '), c.utm_content || '—'),
           el('div', {}, el('span', { class: 'text-slate-500' }, 'Type: '), c.is_recollab ? `Re-collab (${c.rcb_count || '?'})` : 'New'),
-          c.gone_live_link ? el('div', { class: 'col-span-2' }, el('span', { class: 'text-slate-500' }, 'Gone Live Link: '), el('a', { href: c.gone_live_link, target: '_blank', class: 'text-blue-600 hover:underline break-all' }, c.gone_live_link)) : null,
-          c.google_drive_link ? el('div', { class: 'col-span-2' }, el('span', { class: 'text-slate-500' }, 'Drive: '), el('a', { href: c.google_drive_link, target: '_blank', class: 'text-blue-600 hover:underline break-all' }, c.google_drive_link)) : null,
+          c.gone_live_link ? el('div', { class: 'col-span-2' }, el('span', { class: 'text-slate-500' }, 'Gone Live Link: '), el('a', { href: c.gone_live_link, target: '_blank', class: 'text-brand hover:underline break-all' }, c.gone_live_link)) : null,
+          c.google_drive_link ? el('div', { class: 'col-span-2' }, el('span', { class: 'text-slate-500' }, 'Drive: '), el('a', { href: c.google_drive_link, target: '_blank', class: 'text-brand hover:underline break-all' }, c.google_drive_link)) : null,
           c.insights ? el('div', { class: 'col-span-2' }, el('span', { class: 'text-slate-500' }, 'Insights: '), c.insights) : null,
         )
       ) : null;
@@ -1992,8 +2097,12 @@
               )
             )
           ),
-          el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand',
-            onClick: () => openAddPlatformModal(p) }, '+ Add platform')
+          el('div', { class: 'flex gap-2' },
+            el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-md hover:bg-slate-50 text-slate-700',
+              onClick: () => openEditProfileModal(p, async () => { await fetchProfileDetail(p.id); render(); }) }, 'Edit profile'),
+            el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand',
+              onClick: () => openAddPlatformModal(p) }, '+ Add platform')
+          )
         )
       );
 
@@ -2001,10 +2110,10 @@
         el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Contact'),
         el('div', { class: 'grid grid-cols-1 md:grid-cols-2 gap-2 text-sm' },
           el('div', {}, el('span', { class: 'text-slate-500 text-xs' }, 'Email: '),
-            p.email ? el('a', { href: `mailto:${p.email}`, class: 'text-blue-600 hover:underline' }, p.email) : el('span', { class: 'text-slate-400' }, '—')),
+            p.email ? el('a', { href: `mailto:${p.email}`, class: 'text-brand hover:underline' }, p.email) : el('span', { class: 'text-slate-400' }, '—')),
           el('div', {}, el('span', { class: 'text-slate-500 text-xs' }, 'Phone: '),
             p.phone ? el('span', {},
-              el('a', { href: `tel:${p.phone}`, class: 'text-blue-600 hover:underline mr-2' }, p.phone),
+              el('a', { href: `tel:${p.phone}`, class: 'text-brand hover:underline mr-2' }, p.phone),
               el('a', { href: `sms:${p.phone}`, class: 'text-xs text-slate-500 hover:underline mr-1' }, '·SMS'),
               el('a', { href: `https://wa.me/${p.phone.replace(/\D/g,'')}`, target: '_blank', class: 'text-xs text-emerald-600 hover:underline' }, '·WhatsApp')
             ) : el('span', { class: 'text-slate-400' }, '—')),
@@ -2027,7 +2136,11 @@
                   pl.owner?.full_name ? `Owner: ${pl.owner.full_name}` : null,
                 ].filter(Boolean).join(' · '))
               ),
-              pl.link ? el('a', { href: pl.link, target: '_blank', class: 'text-xs text-blue-600 hover:underline' }, 'Visit ↗') : null
+              el('div', { class: 'flex items-center gap-3' },
+                pl.link ? el('a', { href: pl.link, target: '_blank', class: 'text-xs text-brand hover:underline' }, 'Visit ↗') : null,
+                el('button', { class: 'text-xs text-slate-500 hover:text-slate-800 hover:underline',
+                  onClick: () => openEditPlatformModal(pl, async () => { await fetchProfileDetail(p.id); render(); }) }, 'Edit')
+              )
             ),
             el('div', { class: 'divide-y divide-slate-100' },
               camps.length
@@ -2101,13 +2214,17 @@
             .filter(([k, r]) => !r.adminOnly || state.me?.role === 'admin')
             .map(([k, r]) => {
               const active = state.route === k;
+              const badge = (k === 'followups' && state.overdueCount > 0)
+                ? el('span', { class: `ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full ${active ? 'bg-white/30 text-white' : 'bg-rose-500 text-white'}` }, String(state.overdueCount))
+                : null;
               return el('a', {
                 href: '#' + k,
                 class: `flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-colors ${active ? 'text-white font-medium' : 'text-slate-700 hover:bg-slate-100'}`,
                 style: active ? 'background-color: var(--brand);' : ''
               },
                 el('span', { class: 'text-base' }, r.icon),
-                el('span', {}, r.label)
+                el('span', {}, r.label),
+                badge
               );
             })
         ),
@@ -2165,6 +2282,7 @@
       }
 
       await loadFilterOptions();
+      await refreshOverdueCount();
       parseRoute();
       if (state.routeParam && state.route === 'campaigns') await fetchCampaignDetail(state.routeParam);
       else if (state.routeParam && state.route === 'profiles') await fetchProfileDetail(state.routeParam);
@@ -2184,6 +2302,7 @@
           const r = ROUTES[state.route];
           if (r?.prefetch) await r.prefetch();
         }
+        await refreshOverdueCount();
         render();
         $('#sidebar')?.classList.remove('open');
       });
