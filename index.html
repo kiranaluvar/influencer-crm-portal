@@ -1141,7 +1141,7 @@
     const teamState = { members: [] };
     async function fetchTeam() {
       const { data, error } = await supabase.from('team_members').select(`
-        *, team_lead:team_members!team_members_team_lead_id_fkey ( full_name )
+        *, team_lead:team_lead_id ( full_name )
       `).order('created_at', { ascending: true });
       if (error) { toast(error.message, 'error'); return; }
       teamState.members = data || [];
