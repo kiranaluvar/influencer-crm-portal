@@ -42,6 +42,17 @@
     }
     /* Heatmap cell colors */
     .heatmap-cell { color: #fff; font-size: 11px; padding: 4px 6px; text-align: center; min-width: 32px; }
+    /* Responsive table rows: stack vertically on mobile */
+    @media (max-width: 767px) {
+      .crm-row {
+        grid-template-columns: 1fr !important;
+        row-gap: 6px;
+        padding: 14px 16px;
+      }
+      .crm-row > * { min-width: 0; }
+      .crm-row .crm-avatar { display: none; }
+      .crm-row-cell-secondary { color: #64748b; font-size: 12px; }
+    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-900 antialiased">
@@ -286,30 +297,49 @@
       const from = (L.page - 1) * PAGE_SIZE;
       const to   = from + PAGE_SIZE - 1;
 
-      let q = supabase.from('campaigns').select(`
+      const sel = `
         id, name, sub_status, group_status, owner_id, next_followup_at, updated_at, created_at,
         platform:platforms!inner ( id, platform, username, followers, profile:profiles!inner ( id, name, lead_type ) ),
         owner:team_members!campaigns_owner_id_fkey ( full_name )
-      `, { count: 'exact' });
+      `;
+
+      const applyFilters = (q) => {
+        if (L.filters.group_status) q = q.eq('group_status', L.filters.group_status);
+        if (L.filters.sub_status)   q = q.eq('sub_status', L.filters.sub_status);
+        if (L.filters.owner_id)     q = q.eq('owner_id', L.filters.owner_id);
+        if (L.filters.platform)     q = q.eq('platforms.platform', L.filters.platform);
+        if (L.filters.date_from)    q = q.gte('created_at', L.filters.date_from);
+        if (L.filters.date_to)      q = q.lte('created_at', L.filters.date_to + 'T23:59:59');
+        return q;
+      };
 
       if (L.search) {
-        q = q.or(`name.ilike.%${L.search}%`);
+        // Multi-query merge: search by campaign name, platform username, influencer name in parallel
+        const s = L.search;
+        const [a, b, c] = await Promise.all([
+          applyFilters(supabase.from('campaigns').select(sel)).ilike('name', `%${s}%`).order('updated_at', { ascending: false }).limit(200),
+          applyFilters(supabase.from('campaigns').select(sel)).ilike('platforms.username', `%${s}%`).order('updated_at', { ascending: false }).limit(200),
+          applyFilters(supabase.from('campaigns').select(sel)).ilike('platforms.profiles.name', `%${s}%`).order('updated_at', { ascending: false }).limit(200),
+        ]);
+        if (a.error || b.error || c.error) {
+          const err = a.error || b.error || c.error;
+          console.error(err); toast(err.message, 'error'); return;
+        }
+        const merged = new Map();
+        [a.data, b.data, c.data].forEach(arr => (arr || []).forEach(item => merged.set(item.id, item)));
+        const all = Array.from(merged.values()).sort((x, y) => new Date(y.updated_at) - new Date(x.updated_at));
+        L.total = all.length;
+        L.items = all.slice(from, from + PAGE_SIZE);
+      } else {
+        let q = applyFilters(supabase.from('campaigns').select(sel, { count: 'exact' }))
+          .order('updated_at', { ascending: false }).range(from, to);
+        const { data, error, count } = await q;
+        if (error) { console.error(error); toast(error.message, 'error'); return; }
+        L.items = data || [];
+        L.total = count || 0;
       }
-      if (L.filters.group_status) q = q.eq('group_status', L.filters.group_status);
-      if (L.filters.sub_status)   q = q.eq('sub_status', L.filters.sub_status);
-      if (L.filters.owner_id)     q = q.eq('owner_id', L.filters.owner_id);
-      if (L.filters.platform)     q = q.eq('platforms.platform', L.filters.platform);
-      if (L.filters.date_from)    q = q.gte('created_at', L.filters.date_from);
-      if (L.filters.date_to)      q = q.lte('created_at', L.filters.date_to + 'T23:59:59');
 
-      q = q.order('updated_at', { ascending: false }).range(from, to);
-
-      const { data, error, count } = await q;
-      if (error) { console.error(error); toast(error.message, 'error'); return; }
-      L.items = data || [];
-      L.total = count || 0;
-
-      // Also fetch global pipeline counts (for the strip)
+      // Pipeline counts for the strip
       const { data: pc } = await supabase.rpc('dashboard_data');
       state.pipelineCounts = pc?.pipeline || [];
     }
@@ -585,7 +615,7 @@
       const pipelineCounts = state.pipelineCounts || [];
 
       // Toolbar
-      const searchInp = el('input', { type: 'search', placeholder: 'Search campaign name…', value: L.search,
+      const searchInp = el('input', { type: 'search', placeholder: 'Search by campaign, influencer or @username…', value: L.search,
         class: 'flex-1 sm:flex-none sm:w-64 px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400 bg-white',
         oninput: debounce(e => { L.search = e.target.value; L.page = 1; refresh('campaigns'); }, 350)
       });
@@ -629,9 +659,9 @@
         const pl = c.platform;
         const stageVariant = { 'Scraping':'slate','Screening':'info','Negotiation':'warning','Integration Planning':'purple','Documents':'indigo','Gone Live':'success','Post Gone Live':'livedark','Dropped':'rose' }[c.group_status] || 'slate';
         const overdue = c.next_followup_at && new Date(c.next_followup_at) < new Date() && !['Dropped','Post Gone Live'].includes(c.group_status);
-        return el('div', { class: 'grid gap-3 items-center px-4 py-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer', style: `grid-template-columns:${cols};`,
+        return el('div', { class: 'crm-row grid gap-3 items-center px-4 py-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer', style: `grid-template-columns:${cols};`,
           onClick: () => { window.location.hash = `#campaigns/${c.id}`; } },
-          avatar(p?.name || '?', 28),
+          el('div', { class: 'crm-avatar' }, avatar(p?.name || '?', 28)),
           el('div', { class: 'min-w-0' },
             el('div', { class: 'text-[13px] font-medium text-slate-900 truncate' }, p?.name || '—'),
             el('div', { class: 'text-[11px] text-slate-400 truncate font-mono' }, `${c.name} · ${p?.lead_type || ''} lead`)
@@ -720,8 +750,8 @@
         el('div', { class: 'text-right' }, '')
       );
 
-      const rows = L.items.length ? L.items.map(p => el('div', { class: 'grid gap-3 items-center px-4 py-3 border-b border-slate-100 hover:bg-slate-50', style: `grid-template-columns:${cols};` },
-        avatar(p.name, 28),
+      const rows = L.items.length ? L.items.map(p => el('div', { class: 'crm-row grid gap-3 items-center px-4 py-3 border-b border-slate-100 hover:bg-slate-50', style: `grid-template-columns:${cols};` },
+        el('div', { class: 'crm-avatar' }, avatar(p.name, 28)),
         el('div', { class: 'min-w-0 cursor-pointer', onClick: () => { window.location.hash = `#profiles/${p.id}`; } },
           el('div', { class: 'text-[13px] font-medium text-slate-900 truncate' }, p.name),
           el('div', { class: 'text-[11px] text-slate-400 truncate' }, p.region || '—')
@@ -1272,6 +1302,58 @@
         await fetchTeam(); render(); toast('Status updated', 'success');
       };
 
+      const openBulkReassign = (member) => {
+        const otherMembers = m.filter(x => x.user_id !== member.user_id && x.is_active);
+        if (!otherMembers.length) return toast('No other active members to reassign to', 'error');
+
+        const targetSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' },
+          el('option', { value: '' }, '— Pick a team member —'),
+          ...otherMembers.map(x => el('option', { value: x.user_id }, `${x.full_name || x.email} (${x.role})`))
+        );
+
+        const countEl = el('span', { class: 'font-semibold' }, '…');
+        // Fetch active campaign count for the source member
+        supabase.from('campaigns').select('id', { count: 'exact', head: true })
+          .eq('owner_id', member.user_id)
+          .not('group_status', 'in', '("Dropped","Post Gone Live")')
+          .then(({ count }) => { countEl.textContent = String(count || 0); });
+
+        const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Reassign all');
+        submitBtn.addEventListener('click', async () => {
+          if (!targetSel.value) return toast('Pick a target team member', 'error');
+          if (!confirm(`Move all active campaigns from ${member.full_name || member.email} to the selected member?`)) return;
+          submitBtn.disabled = true; submitBtn.textContent = 'Reassigning…';
+          const { error, count } = await supabase.from('campaigns')
+            .update({ owner_id: targetSel.value }, { count: 'exact' })
+            .eq('owner_id', member.user_id)
+            .not('group_status', 'in', '("Dropped","Post Gone Live")');
+          submitBtn.disabled = false; submitBtn.textContent = 'Reassign all';
+          if (error) return toast(error.message, 'error');
+          modal.close();
+          toast(`Reassigned ${count || 0} active campaigns`, 'success');
+          await fetchTeam(); render();
+        });
+
+        const wrap = el('div', { class: 'space-y-3' },
+          el('p', { class: 'text-sm text-slate-600' }, 'Moving active (non-terminal) campaigns from ',
+            el('span', { class: 'font-semibold' }, member.full_name || member.email),
+            ' (', countEl, ' campaigns)'
+          ),
+          el('label', { class: 'block' },
+            el('span', { class: 'text-xs font-medium text-slate-600' }, 'Reassign to *'),
+            targetSel
+          ),
+          el('p', { class: 'text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5' },
+            'This only moves Open/Active campaigns. Dropped & Post Gone Live ones stay with the original owner for historical accuracy.'
+          ),
+          el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-slate-200' },
+            el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+            submitBtn
+          )
+        );
+        const modal = renderModal(`Reassign campaigns from ${member.full_name || member.email}`, wrap);
+      };
+
       return el('div', {},
         pageHeader('Administration', 'Team', `${m.length} members · manage roles and team leads`, null),
         el('div', { class: 'bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-900' },
@@ -1287,7 +1369,7 @@
                   el('th', { class: 'px-3 py-2 text-left' }, 'Role'),
                   el('th', { class: 'px-3 py-2 text-left' }, 'Team Lead'),
                   el('th', { class: 'px-3 py-2 text-center' }, 'Active'),
-                  el('th', { class: 'px-3 py-2' }, '')
+                  el('th', { class: 'px-3 py-2 text-right' }, 'Actions')
                 )
               ),
               el('tbody', {},
@@ -1295,13 +1377,13 @@
                   el('td', { class: 'px-3 py-2' }, x.full_name || '—'),
                   el('td', { class: 'px-3 py-2 text-xs text-slate-600' }, x.email),
                   el('td', { class: 'px-3 py-2' },
-                    el('select', { class: 'px-2 py-1 text-sm border border-slate-300 rounded',
+                    el('select', { class: 'px-2 py-1 text-sm border border-slate-200 rounded',
                       onchange: e => updateRole(x.user_id, e.target.value) },
                       ...['user','tl','admin'].map(r => el('option', { value: r, selected: x.role === r }, r))
                     )
                   ),
                   el('td', { class: 'px-3 py-2' },
-                    x.role === 'user' ? el('select', { class: 'px-2 py-1 text-sm border border-slate-300 rounded',
+                    x.role === 'user' ? el('select', { class: 'px-2 py-1 text-sm border border-slate-200 rounded',
                       onchange: e => updateTL(x.user_id, e.target.value) },
                       el('option', { value: '' }, '—'),
                       ...tls.map(t => el('option', { value: t.user_id, selected: x.team_lead_id === t.user_id }, t.full_name || t.email))
@@ -1310,7 +1392,9 @@
                   el('td', { class: 'px-3 py-2 text-center' },
                     el('input', { type: 'checkbox', checked: x.is_active, onchange: e => updateActive(x.user_id, e.target.checked) })
                   ),
-                  el('td', { class: 'px-3 py-2 text-xs text-slate-400' }, fmtDate(x.created_at))
+                  el('td', { class: 'px-3 py-2 text-right' },
+                    el('button', { class: 'text-xs text-brand hover:underline', onClick: () => openBulkReassign(x) }, 'Reassign campaigns')
+                  )
                 ))
               )
             )
