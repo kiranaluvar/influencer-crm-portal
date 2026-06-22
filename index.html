@@ -1116,16 +1116,21 @@
     // ===============================================================
     // REPORTS (admin)
     // ===============================================================
-    const reportsState = { from: null, to: null, data: null };
+    const reportsState = { from: null, to: null, data: null, targets: null };
     async function fetchReports() {
       if (!reportsState.from) {
         const t = new Date(); const f = new Date(t); f.setDate(f.getDate() - 29);
         reportsState.to = t.toISOString().slice(0, 10);
         reportsState.from = f.toISOString().slice(0, 10);
       }
-      const { data, error } = await supabase.rpc('reports_data', { d_from: reportsState.from, d_to: reportsState.to });
-      if (error) { toast(error.message, 'error'); return; }
-      reportsState.data = data;
+      const [{ data: d, error: e1 }, { data: tg, error: e2 }] = await Promise.all([
+        supabase.rpc('reports_data', { d_from: reportsState.from, d_to: reportsState.to }),
+        supabase.rpc('reachout_target_report', { d_from: reportsState.from, d_to: reportsState.to }),
+      ]);
+      if (e1) { toast(e1.message, 'error'); return; }
+      if (e2) { toast(e2.message, 'error'); }
+      reportsState.data = d;
+      reportsState.targets = tg;
     }
 
     function viewReports() {
@@ -1264,9 +1269,68 @@
         }
       }, 0);
 
+      // Reach-out targets — target vs achieved by day & owner (Sunday excluded)
+      const tg = reportsState.targets;
+      const targetCard = tg ? (() => {
+        const matrixByUserDay = {};
+        (tg.matrix || []).forEach(m => { matrixByUserDay[`${m.user_id}|${m.d}`] = m; });
+        const cellColor = (achieved, target) => {
+          if (!target) return 'bg-slate-50 text-slate-400';
+          const pct = (achieved / target) * 100;
+          if (pct >= 100) return 'bg-emerald-50 text-emerald-800';
+          if (pct >= 50)  return 'bg-amber-50 text-amber-800';
+          return 'bg-rose-50 text-rose-700';
+        };
+        const dayLabel = (d) => {
+          const dt = new Date(d);
+          return `${dt.getDate()}/${dt.getMonth()+1}`;
+        };
+        const weekday = (d) => ['Su','Mo','Tu','We','Th','Fr','Sa'][new Date(d).getDay()];
+        return el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
+          el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between' },
+            el('div', { class: 'text-sm font-semibold' }, 'Reach-out targets · Target vs Achieved'),
+            el('div', { class: 'text-[11px] text-slate-500' }, 'Sundays excluded · New scouts only')
+          ),
+          el('div', { class: 'overflow-x-auto' },
+            el('table', { class: 'w-full text-xs' },
+              el('thead', {},
+                el('tr', { class: 'bg-slate-50 text-slate-500 uppercase text-[10px]' },
+                  el('th', { class: 'px-2 py-1.5 text-left sticky left-0 bg-slate-50' }, 'Agent'),
+                  el('th', { class: 'px-2 py-1.5 text-right' }, 'Target/day'),
+                  ...(tg.days || []).map(d => el('th', { class: 'px-1.5 py-1.5 text-center' },
+                    el('div', { class: 'text-[10px]' }, weekday(d)),
+                    el('div', { class: 'font-normal' }, dayLabel(d))
+                  )),
+                  el('th', { class: 'px-2 py-1.5 text-right bg-slate-100' }, 'Total')
+                )
+              ),
+              el('tbody', {},
+                ...((tg.summary || []).map(u => {
+                  const totalPct = u.total_target ? Math.round(100 * u.total_achieved / u.total_target) : 0;
+                  const totalColor = !u.total_target ? 'text-slate-400' : totalPct >= 100 ? 'text-emerald-700 font-semibold' : totalPct >= 50 ? 'text-amber-700' : 'text-rose-600 font-semibold';
+                  return el('tr', { class: 'border-b border-slate-100' },
+                    el('td', { class: 'px-2 py-1.5 sticky left-0 bg-white font-medium' }, u.full_name || '—'),
+                    el('td', { class: 'px-2 py-1.5 text-right text-slate-600' }, String(u.daily_target || 0)),
+                    ...(tg.days || []).map(d => {
+                      const cell = matrixByUserDay[`${u.user_id}|${d}`] || { achieved: 0, target: u.daily_target };
+                      return el('td', { class: `px-1.5 py-1.5 text-center ${cellColor(cell.achieved, cell.target)}` },
+                        u.daily_target ? `${cell.achieved}/${cell.target}` : String(cell.achieved)
+                      );
+                    }),
+                    el('td', { class: `px-2 py-1.5 text-right bg-slate-50 ${totalColor}` },
+                      `${u.total_achieved}/${u.total_target} (${totalPct}%)`
+                    )
+                  );
+                }))
+              )
+            )
+          )
+        );
+      })() : null;
+
       return el('div', {},
         pageHeader('Insights', 'Reports', 'Activity and performance over a custom date range', null),
-        dateBar, hourlyCard, agentDaily, matrixCard, l2eCard, dropCard
+        dateBar, hourlyCard, targetCard, agentDaily, matrixCard, l2eCard, dropCard
       );
     }
 
@@ -1276,7 +1340,7 @@
     const teamState = { members: [] };
     async function fetchTeam() {
       const { data, error } = await supabase.from('team_members').select(`
-        *, team_lead:team_lead_id ( full_name )
+        *, team_lead:team_lead_id ( full_name ), target:user_targets ( daily_target )
       `).order('created_at', { ascending: true });
       if (error) { toast(error.message, 'error'); return; }
       teamState.members = data || [];
@@ -1300,6 +1364,16 @@
         const { error } = await supabase.from('team_members').update({ is_active: isActive }).eq('user_id', uid);
         if (error) return toast(error.message, 'error');
         await fetchTeam(); render(); toast('Status updated', 'success');
+      };
+
+      const updateTarget = async (uid, target) => {
+        const t = parseInt(target) || 0;
+        // upsert via merge on PK
+        const { error } = await supabase.from('user_targets')
+          .upsert({ user_id: uid, daily_target: t, updated_by: state.me.user_id }, { onConflict: 'user_id' });
+        if (error) return toast(error.message, 'error');
+        await fetchTeam();
+        toast('Daily target updated', 'success');
       };
 
       const openBulkReassign = (member) => {
@@ -1369,6 +1443,7 @@
                   el('th', { class: 'px-3 py-2 text-left' }, 'Role'),
                   el('th', { class: 'px-3 py-2 text-left' }, 'Team Lead'),
                   el('th', { class: 'px-3 py-2 text-center' }, 'Active'),
+                  el('th', { class: 'px-3 py-2 text-right' }, 'Daily Target'),
                   el('th', { class: 'px-3 py-2 text-right' }, 'Actions')
                 )
               ),
@@ -1391,6 +1466,14 @@
                   ),
                   el('td', { class: 'px-3 py-2 text-center' },
                     el('input', { type: 'checkbox', checked: x.is_active, onchange: e => updateActive(x.user_id, e.target.checked) })
+                  ),
+                  el('td', { class: 'px-3 py-2 text-right' },
+                    el('input', {
+                      type: 'number', min: 0,
+                      value: x.target?.[0]?.daily_target ?? 0,
+                      class: 'w-16 px-2 py-1 text-sm text-right border border-slate-200 rounded',
+                      onblur: e => updateTarget(x.user_id, e.target.value)
+                    })
                   ),
                   el('td', { class: 'px-3 py-2 text-right' },
                     el('button', { class: 'text-xs text-brand hover:underline', onClick: () => openBulkReassign(x) }, 'Reassign campaigns')
