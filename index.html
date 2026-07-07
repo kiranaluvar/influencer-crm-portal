@@ -1337,13 +1337,17 @@
     // ===============================================================
     // TEAM (admin)
     // ===============================================================
-    const teamState = { members: [] };
+    const teamState = { members: [], pocs: [] };
     async function fetchTeam() {
-      const { data, error } = await supabase.from('team_members').select(`
-        *, team_lead:team_lead_id ( full_name ), target:user_targets ( daily_target )
-      `).order('created_at', { ascending: true });
+      const [{ data, error }, { data: pocs }] = await Promise.all([
+        supabase.from('team_members').select(`
+          *, team_lead:team_lead_id ( full_name ), target:user_targets ( daily_target )
+        `).order('created_at', { ascending: true }),
+        supabase.rpc('imported_poc_summary'),
+      ]);
       if (error) { toast(error.message, 'error'); return; }
       teamState.members = data || [];
+      teamState.pocs = pocs || [];
     }
 
     function viewTeam() {
@@ -1428,11 +1432,66 @@
         const modal = renderModal(`Reassign campaigns from ${member.full_name || member.email}`, wrap);
       };
 
+      const migratePOC = async (poc, targetUserId, targetName) => {
+        if (!targetUserId) return toast('Pick a team member', 'error');
+        if (!confirm(`Migrate all records tagged "${poc}" to ${targetName}? This will transfer ownership of profiles, platforms, and campaigns.`)) return;
+        const { data, error } = await supabase.rpc('migrate_poc', { poc_name: poc, target_user: targetUserId });
+        if (error) return toast(error.message, 'error');
+        toast(`Migrated: ${data.profiles} profiles · ${data.platforms} platforms · ${data.campaigns} campaigns`, 'success');
+        await fetchTeam(); render();
+      };
+
+      const pocSection = teamState.pocs.length ? el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
+        el('div', { class: 'px-4 py-2.5 border-b border-slate-200 bg-amber-50 flex items-center justify-between' },
+          el('div', {},
+            el('div', { class: 'text-sm font-semibold text-amber-900' }, 'POC Migration'),
+            el('div', { class: 'text-[11px] text-amber-700 mt-0.5' }, `${teamState.pocs.length} POC names from the initial import need to be mapped to real accounts`)
+          )
+        ),
+        el('div', { class: 'overflow-x-auto' },
+          el('table', { class: 'w-full text-sm' },
+            el('thead', { class: 'bg-slate-50 text-[11px] uppercase text-slate-500' },
+              el('tr', {},
+                el('th', { class: 'px-3 py-2 text-left' }, 'Imported POC'),
+                el('th', { class: 'px-3 py-2 text-right' }, 'Profiles'),
+                el('th', { class: 'px-3 py-2 text-right' }, 'Platforms'),
+                el('th', { class: 'px-3 py-2 text-right' }, 'Campaigns'),
+                el('th', { class: 'px-3 py-2 text-left' }, 'Assign to team member'),
+                el('th', { class: 'px-3 py-2 text-right' }, '')
+              )
+            ),
+            el('tbody', {},
+              ...teamState.pocs.map(p => {
+                const sel = el('select', { class: 'px-2 py-1 text-sm border border-slate-200 rounded w-full max-w-[220px]' },
+                  el('option', { value: '' }, '— Pick a signed-in member —'),
+                  ...m.filter(x => x.is_active).map(x => el('option', { value: x.user_id, 'data-name': x.full_name || x.email }, x.full_name || x.email))
+                );
+                return el('tr', { class: 'border-b border-slate-100' },
+                  el('td', { class: 'px-3 py-2 font-medium' }, p.poc),
+                  el('td', { class: 'px-3 py-2 text-right' }, String(p.profiles)),
+                  el('td', { class: 'px-3 py-2 text-right' }, String(p.platforms)),
+                  el('td', { class: 'px-3 py-2 text-right' }, String(p.campaigns)),
+                  el('td', { class: 'px-3 py-2' }, sel),
+                  el('td', { class: 'px-3 py-2 text-right' },
+                    el('button', { class: 'px-2 py-1 text-xs rounded-md btn-brand',
+                      onClick: () => {
+                        const opt = sel.options[sel.selectedIndex];
+                        migratePOC(p.poc, sel.value, opt.getAttribute('data-name') || opt.textContent);
+                      } }, 'Migrate')
+                  )
+                );
+              })
+            )
+          )
+        )
+      ) : null;
+
       return el('div', {},
         pageHeader('Administration', 'Team', `${m.length} members · manage roles and team leads`, null),
         el('div', { class: 'bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-900' },
           'Team members appear here after they sign in via Google for the first time. Then you can promote them to TL or admin, assign team leads, or deactivate.'
         ),
+        pocSection,
         el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden' },
           el('div', { class: 'overflow-x-auto' },
             el('table', { class: 'w-full text-sm' },
