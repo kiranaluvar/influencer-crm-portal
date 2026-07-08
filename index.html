@@ -299,7 +299,7 @@
 
       const sel = `
         id, name, sub_status, group_status, owner_id, next_followup_at, updated_at, created_at,
-        platform:platforms!inner ( id, platform, username, followers, profile:profiles!inner ( id, name, lead_type ) ),
+        platform:platforms!inner ( id, platform, username, followers, imported_poc, profile:profiles!inner ( id, name, lead_type ) ),
         owner:team_members!campaigns_owner_id_fkey ( full_name )
       `;
 
@@ -671,7 +671,17 @@
             el('div', { class: 'text-[11px] text-slate-400 truncate' }, `@${pl?.username || ''}${pl?.followers ? ' · ' + Number(pl.followers).toLocaleString() : ''}`)
           ),
           el('div', {}, subtleBadge(c.group_status, stageVariant)),
-          el('div', { class: 'text-[12px] text-slate-600 truncate' }, c.owner?.full_name || '—'),
+          (() => {
+            const poc = c.platform?.imported_poc;
+            const realOwner = c.owner?.full_name || '—';
+            if (poc && poc !== realOwner) {
+              return el('div', { class: 'text-[12px] truncate min-w-0', title: `POC pending migration · currently owned by ${realOwner}` },
+                el('span', { class: 'text-slate-700' }, poc),
+                el('span', { class: 'text-[10px] text-amber-600 ml-1' }, '· pending')
+              );
+            }
+            return el('div', { class: 'text-[12px] text-slate-600 truncate' }, realOwner);
+          })(),
           el('div', { class: `text-[11px] text-right truncate ${overdue ? 'text-rose-600 font-medium' : 'text-slate-500'}` },
             c.next_followup_at ? fmtDateTime(c.next_followup_at) : '—'
           )
@@ -939,7 +949,7 @@
       const scope = followupsCache.scope;
       let q = supabase.from('campaigns').select(`
         id, name, sub_status, group_status, next_followup_at, next_followup_note, updated_at,
-        platform:platforms!inner ( platform, username, profile:profiles!inner ( name, phone, email ) ),
+        platform:platforms!inner ( platform, username, imported_poc, profile:profiles!inner ( name, phone, email ) ),
         owner:team_members!campaigns_owner_id_fkey ( user_id, full_name )
       `).not('next_followup_at', 'is', null)
         .not('group_status', 'in', '("Dropped","Post Gone Live")')
@@ -997,7 +1007,16 @@
             el('div', { class: `col-span-6 md:col-span-2 text-xs ${urgent ? 'text-rose-600 font-semibold' : 'text-slate-600'}` },
               fmtDateTime(c.next_followup_at)
             ),
-            el('div', { class: 'col-span-6 md:col-span-2 text-xs text-slate-500 text-right truncate' }, c.owner?.full_name || '—')
+            el('div', { class: 'col-span-6 md:col-span-2 text-xs text-right truncate' },
+              (() => {
+                const poc = c.platform?.imported_poc;
+                const realOwner = c.owner?.full_name || '—';
+                if (poc && poc !== realOwner) {
+                  return el('span', { class: 'text-slate-700' }, poc, el('span', { class: 'text-[10px] text-amber-600 ml-1' }, '· pending'));
+                }
+                return el('span', { class: 'text-slate-500' }, realOwner);
+              })()
+            )
           ))
         )
       ) : null;
@@ -2229,7 +2248,13 @@
         el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
           el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Owner'),
           el('div', { class: 'text-sm' }, c.owner?.full_name || '—'),
-          el('div', { class: 'text-xs text-slate-500 mt-1' }, c.owner?.email || '')
+          el('div', { class: 'text-xs text-slate-500 mt-1' }, c.owner?.email || ''),
+          pl.imported_poc && pl.imported_poc !== c.owner?.full_name
+            ? el('div', { class: 'text-xs mt-2 pt-2 border-t border-slate-100' },
+                el('span', { class: 'text-slate-500' }, 'POC (pending migration): '),
+                el('span', { class: 'text-amber-700 font-medium' }, pl.imported_poc)
+              )
+            : null
         ),
         // Files
         el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
