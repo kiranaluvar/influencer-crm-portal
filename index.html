@@ -617,7 +617,7 @@
       // Toolbar
       const searchInp = el('input', { type: 'search', placeholder: 'Search by campaign, influencer or @username…', value: L.search,
         class: 'flex-1 sm:flex-none sm:w-64 px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400 bg-white',
-        oninput: debounce(e => { L.search = e.target.value; L.page = 1; refresh('campaigns'); }, 350)
+        oninput: debounce(e => { const v = e.target.value; if (v.length === 1) return; L.search = v; L.page = 1; refresh('campaigns'); }, 500)
       });
 
       const groupSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-200 rounded-md bg-white',
@@ -727,7 +727,7 @@
 
       const searchInp = el('input', { type: 'search', placeholder: 'Search name, email, phone…', value: L.search,
         class: 'flex-1 sm:flex-none sm:w-64 px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400 bg-white',
-        oninput: debounce(e => { L.search = e.target.value; L.page = 1; refresh('profiles'); }, 350)
+        oninput: debounce(e => { const v = e.target.value; if (v.length === 1) return; L.search = v; L.page = 1; refresh('profiles'); }, 500)
       });
       const ltSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-200 rounded-md bg-white',
         onchange: e => { L.filters.lead_type = e.target.value || undefined; L.page = 1; refresh('profiles'); }
