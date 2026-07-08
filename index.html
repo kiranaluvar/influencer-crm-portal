@@ -195,7 +195,7 @@
       // counts: array of { group, count } in canonical order
       const order = ['Scraping','Screening','Negotiation','Integration Planning','Documents','Gone Live','Post Gone Live','Dropped'];
       const variants = { 'Scraping':'slate', 'Screening':'info', 'Negotiation':'warning', 'Integration Planning':'purple', 'Documents':'indigo', 'Gone Live':'success', 'Post Gone Live':'livedark', 'Dropped':'rose' };
-      const labels =   { 'Scraping':'Scraping', 'Screening':'Screening', 'Negotiation':'Negotiation', 'Integration Planning':'Integration', 'Documents':'Documents', 'Gone Live':'Gone Live', 'Post Gone Live':'Post Live', 'Dropped':'Dropped' };
+      const labels =   { 'Scraping':'Scraping', 'Screening':'Screening', 'Negotiation':'Negotiation', 'Integration Planning':'Integration Planning', 'Documents':'Documents', 'Gone Live':'Gone Live', 'Post Gone Live':'Post Live', 'Dropped':'Dropped' };
       const lookup = Object.fromEntries((counts || []).map(c => [c.group, c.count]));
       return el('div', { class: 'grid grid-cols-4 sm:grid-cols-8 gap-1.5 mb-5' },
         ...order.map(g => {
