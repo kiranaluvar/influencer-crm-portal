@@ -844,9 +844,10 @@
         };
         if (!payload.name) return toast('Name is required', 'error');
         submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
-        const { error } = await supabase.from('profiles').update(payload).eq('id', p.id);
+        const { data, error } = await supabase.from('profiles').update(payload).eq('id', p.id).select();
         submitBtn.disabled = false; submitBtn.textContent = 'Save changes';
         if (error) return toast(error.message, 'error');
+        if (!data || data.length === 0) return toast('No permission to edit this profile', 'error');
         modal.close();
         toast('Profile updated', 'success');
         if (onSaved) await onSaved();
@@ -1360,7 +1361,7 @@
     async function fetchTeam() {
       const [{ data, error }, { data: pocs }] = await Promise.all([
         supabase.from('team_members').select(`
-          *, team_lead:team_lead_id ( full_name ), target:user_targets ( daily_target )
+          *, team_lead:team_lead_id ( full_name ), target:user_targets!user_targets_user_id_fkey ( daily_target )
         `).order('created_at', { ascending: true }),
         supabase.rpc('imported_poc_summary'),
       ]);
