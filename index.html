@@ -1173,6 +1173,11 @@
       );
 
       // Agent daily reachout table
+      const agentDailyTotal = (d.agent_daily || []).reduce((acc, a) => ({
+        new_count: acc.new_count + (a.new_count || 0),
+        fu_count: acc.fu_count + (a.fu_count || 0),
+        unique_campaigns: acc.unique_campaigns + (a.unique_campaigns || 0)
+      }), { new_count: 0, fu_count: 0, unique_campaigns: 0 });
       const agentDaily = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
         el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 text-sm font-semibold' }, 'Agent reachout summary'),
         el('div', { class: 'overflow-x-auto' },
@@ -1191,7 +1196,13 @@
                 el('td', { class: 'px-3 py-2 text-right' }, String(a.new_count || 0)),
                 el('td', { class: 'px-3 py-2 text-right' }, String(a.fu_count || 0)),
                 el('td', { class: 'px-3 py-2 text-right' }, String(a.unique_campaigns || 0))
-              ))
+              )),
+              el('tr', { class: 'bg-slate-50 font-semibold border-t-2 border-slate-200' },
+                el('td', { class: 'px-3 py-2' }, 'Total'),
+                el('td', { class: 'px-3 py-2 text-right' }, String(agentDailyTotal.new_count)),
+                el('td', { class: 'px-3 py-2 text-right' }, String(agentDailyTotal.fu_count)),
+                el('td', { class: 'px-3 py-2 text-right' }, String(agentDailyTotal.unique_campaigns))
+              )
             )
           )
         )
@@ -1201,6 +1212,9 @@
       const matrix = d.pipeline_matrix || [];
       const groups = Array.from(new Set(matrix.map(m => m.group_status)));
       const agents = Array.from(new Set(matrix.map(m => m.full_name)));
+      const rowTotal = a => groups.reduce((s, g) => s + (matrix.find(m => m.full_name === a && m.group_status === g)?.cnt || 0), 0);
+      const colTotal = g => agents.reduce((s, a) => s + (matrix.find(m => m.full_name === a && m.group_status === g)?.cnt || 0), 0);
+      const grandTotal = agents.reduce((s, a) => s + rowTotal(a), 0);
       const matrixCard = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
         el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 text-sm font-semibold' }, 'Pipeline matrix (owner × stage)'),
         el('div', { class: 'overflow-x-auto' },
@@ -1208,7 +1222,8 @@
             el('thead', {},
               el('tr', { class: 'bg-slate-50 text-slate-500 uppercase text-[10px]' },
                 el('th', { class: 'px-2 py-1.5 text-left' }, 'Agent'),
-                ...groups.map(g => el('th', { class: 'px-2 py-1.5 text-right' }, g))
+                ...groups.map(g => el('th', { class: 'px-2 py-1.5 text-right' }, g)),
+                el('th', { class: 'px-2 py-1.5 text-right bg-slate-100' }, 'Total')
               )
             ),
             el('tbody', {},
@@ -1217,12 +1232,19 @@
                 ...groups.map(g => {
                   const cell = matrix.find(m => m.full_name === a && m.group_status === g);
                   return el('td', { class: 'px-2 py-1.5 text-right' }, cell ? String(cell.cnt) : '—');
-                })
-              ))
+                }),
+                el('td', { class: 'px-2 py-1.5 text-right font-semibold bg-slate-50' }, String(rowTotal(a)))
+              )),
+              el('tr', { class: 'bg-slate-50 font-semibold border-t-2 border-slate-200' },
+                el('td', { class: 'px-2 py-1.5' }, 'Total'),
+                ...groups.map(g => el('td', { class: 'px-2 py-1.5 text-right' }, String(colTotal(g)))),
+                el('td', { class: 'px-2 py-1.5 text-right bg-slate-100' }, String(grandTotal))
+              )
             )
           )
         )
       );
+
 
       // L2E conversion
       const l2eCard = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
@@ -1341,7 +1363,23 @@
                       `${u.total_achieved}/${u.total_target} (${totalPct}%)`
                     )
                   );
-                }))
+                })),
+                (() => {
+                  const summary = tg.summary || [];
+                  const grandDailyTarget = summary.reduce((s, u) => s + (u.daily_target || 0), 0);
+                  const grandAchieved = summary.reduce((s, u) => s + (u.total_achieved || 0), 0);
+                  const grandTarget = summary.reduce((s, u) => s + (u.total_target || 0), 0);
+                  const grandPct = grandTarget ? Math.round(100 * grandAchieved / grandTarget) : 0;
+                  return el('tr', { class: 'bg-slate-50 font-semibold border-t-2 border-slate-200' },
+                    el('td', { class: 'px-2 py-1.5 sticky left-0 bg-slate-50' }, 'Total'),
+                    el('td', { class: 'px-2 py-1.5 text-right' }, String(grandDailyTarget)),
+                    ...(tg.days || []).map(d => {
+                      const dayAchieved = summary.reduce((s, u) => s + ((matrixByUserDay[`${u.user_id}|${d}`] || {}).achieved || 0), 0);
+                      return el('td', { class: 'px-1.5 py-1.5 text-center' }, String(dayAchieved));
+                    }),
+                    el('td', { class: 'px-2 py-1.5 text-right bg-slate-100' }, `${grandAchieved}/${grandTarget} (${grandPct}%)`)
+                  );
+                })()
               )
             )
           )
