@@ -1145,16 +1145,19 @@
       }
       const rangeStart = reportsState.from;
       const rangeEnd = reportsState.to + 'T23:59:59';
-      const [{ data: d, error: e1 }, { data: tg, error: e2 }, { data: rawScouts, error: e3 }, { data: rawFollowups, error: e4 }] = await Promise.all([
+      const [{ data: d, error: e1 }, { data: tg, error: e2 }, { data: rawScouts, error: e3 }, { data: rawFollowups, error: e4 }, { data: admins, error: e5 }] = await Promise.all([
         supabase.rpc('reports_data', { d_from: reportsState.from, d_to: reportsState.to }),
         supabase.rpc('reachout_target_report', { d_from: reportsState.from, d_to: reportsState.to }),
         supabase.from('platforms').select('created_at').gte('created_at', rangeStart).lte('created_at', rangeEnd),
         supabase.from('campaign_activities').select('created_at').gte('created_at', rangeStart).lte('created_at', rangeEnd),
+        supabase.from('team_members').select('user_id').eq('role', 'admin'),
       ]);
       if (e1) { toast(e1.message, 'error'); return; }
       if (e2) { toast(e2.message, 'error'); }
       reportsState.data = d;
-      reportsState.targets = tg;
+      // Admins don't carry a reachout target — exclude them from the Target vs Achieved report entirely
+      const adminIds = new Set((admins || []).map(a => a.user_id));
+      reportsState.targets = tg ? { ...tg, summary: (tg.summary || []).filter(u => !adminIds.has(u.user_id)) } : tg;
       // The RPC's own hourly bucketing has a known bug (correlated subquery mismatches hours across
       // different days), so recompute hourly counts here directly from raw rows instead of trusting d.hourly.
       if (!e3 && !e4) {
