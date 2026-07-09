@@ -1166,10 +1166,10 @@
       );
 
       // Hourly: new scouts vs follow-ups
-      const hourlyCanvas = el('canvas', { id: 'rep-hourly', height: 220 });
+      const hourlyCanvas = el('canvas', { id: 'rep-hourly' });
       const hourlyCard = el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4 mb-4' },
         el('h3', { class: 'text-sm font-semibold mb-3' }, 'Hourly — new scouts vs follow-ups'),
-        hourlyCanvas
+        el('div', { style: 'height:180px;position:relative;' }, hourlyCanvas)
       );
 
       // Agent daily reachout table
@@ -1284,7 +1284,7 @@
               { label: 'New scouts', data: newData, backgroundColor: '#4060f0' },
               { label: 'Follow-ups', data: fuData, backgroundColor: '#f08000' }
             ]},
-            options: { responsive: true, scales: { x: { stacked: true }, y: { stacked: true } } }
+            options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } } }
           });
         }
       }, 0);
@@ -1348,9 +1348,58 @@
         );
       })() : null;
 
+      // Raw data export (admin only — Reports page itself is already admin-gated, this is an extra explicit check)
+      // Definitions match reports_data RPC exactly: new scout = platforms row, follow-up = campaign_activities row
+      const exportCard = state.me?.role === 'admin' ? el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4 mb-4' },
+        el('h3', { class: 'text-sm font-semibold mb-1' }, 'Export raw data'),
+        el('p', { class: 'text-xs text-slate-500 mb-3' }, `For the selected date range (${reportsState.from} → ${reportsState.to}).`),
+        el('div', { class: 'flex flex-wrap gap-2' },
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-white border border-slate-200 hover:bg-slate-50 text-slate-700',
+            onClick: async () => {
+              const { data, error } = await supabase.from('platforms')
+                .select(`created_at, platform, username, profile:profiles ( name ), agent:team_members!created_by ( full_name )`)
+                .gte('created_at', reportsState.from).lte('created_at', reportsState.to + 'T23:59:59')
+                .order('created_at', { ascending: false });
+              if (error) return toast(error.message, 'error');
+              if (!data || !data.length) return toast('No new scouts in this range', 'error');
+              const rows = data.map(p => ({ date: p.created_at, agent: p.agent?.full_name || '', profile: p.profile?.name || '', platform: p.platform || '', username: p.username || '' }));
+              downloadCSV(`new-scouts_${reportsState.from}_to_${reportsState.to}.csv`,
+                toCSV(rows, [
+                  { label: 'Date', value: 'date' }, { label: 'Agent', value: 'agent' },
+                  { label: 'Profile', value: 'profile' }, { label: 'Platform', value: 'platform' }, { label: 'Username', value: 'username' }
+                ]));
+            } }, '⬇ New scouts (raw)'),
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-white border border-slate-200 hover:bg-slate-50 text-slate-700',
+            onClick: async () => {
+              const { data, error } = await supabase.from('campaign_activities')
+                .select(`created_at, activity_type, note, campaign:campaigns ( name ), user:team_members!campaign_activities_user_id_fkey ( full_name )`)
+                .gte('created_at', reportsState.from).lte('created_at', reportsState.to + 'T23:59:59')
+                .order('created_at', { ascending: false });
+              if (error) return toast(error.message, 'error');
+              if (!data || !data.length) return toast('No follow-ups in this range', 'error');
+              const rows = data.map(a => ({ date: a.created_at, agent: a.user?.full_name || '', campaign: a.campaign?.name || '', type: a.activity_type, note: a.note || '' }));
+              downloadCSV(`follow-ups_${reportsState.from}_to_${reportsState.to}.csv`,
+                toCSV(rows, [
+                  { label: 'Date', value: 'date' }, { label: 'Agent', value: 'agent' },
+                  { label: 'Campaign', value: 'campaign' }, { label: 'Type', value: 'type' }, { label: 'Note', value: 'note' }
+                ]));
+            } }, '⬇ Follow-ups (raw)'),
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-white border border-slate-200 hover:bg-slate-50 text-slate-700',
+            onClick: () => {
+              const rows = (reportsState.targets?.matrix || []).map(m => ({ user_id: m.user_id, date: m.d, achieved: m.achieved, target: m.target }));
+              if (!rows.length) return toast('No target data in this range', 'error');
+              downloadCSV(`reachout-targets_${reportsState.from}_to_${reportsState.to}.csv`,
+                toCSV(rows, [
+                  { label: 'User ID', value: 'user_id' }, { label: 'Date', value: 'date' },
+                  { label: 'New scouts achieved', value: 'achieved' }, { label: 'Daily target', value: 'target' }
+                ]));
+            } }, '⬇ New scouts vs target (raw)')
+        )
+      ) : null;
+
       return el('div', {},
         pageHeader('Insights', 'Reports', 'Activity and performance over a custom date range', null),
-        dateBar, hourlyCard, targetCard, agentDaily, matrixCard, l2eCard, dropCard
+        dateBar, exportCard, hourlyCard, targetCard, agentDaily, matrixCard, l2eCard, dropCard
       );
     }
 
@@ -1549,7 +1598,7 @@
                   el('td', { class: 'px-3 py-2 text-right' },
                     el('input', {
                       type: 'number', min: 0,
-                      value: x.target?.[0]?.daily_target ?? 0,
+                      value: x.target?.[0]?.daily_target ?? 10,
                       class: 'w-16 px-2 py-1 text-sm text-right border border-slate-200 rounded',
                       onblur: e => updateTarget(x.user_id, e.target.value)
                     })
@@ -2460,7 +2509,6 @@
       campaigns: { label: 'Campaigns', icon: '🎯', view: viewCampaigns, prefetch: fetchCampaigns },
       profiles:  { label: 'Profiles',  icon: '👤', view: viewProfiles,  prefetch: fetchProfiles },
       followups: { label: 'Follow-ups', icon: '⏰', view: viewFollowups, prefetch: fetchFollowups },
-      dashboard: { label: 'Dashboard',  icon: '📊', view: viewDashboard, prefetch: fetchDashboard },
       reports:   { label: 'Reports',    icon: '📈', view: viewReports,   prefetch: fetchReports, adminOnly: true },
       team:      { label: 'Team',       icon: '👥', view: viewTeam,      prefetch: fetchTeam,    adminOnly: true },
     };
