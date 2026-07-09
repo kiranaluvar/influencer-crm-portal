@@ -1747,6 +1747,29 @@
       });
     }
 
+    // Returns ALL stages/sub-statuses (grouped, in pipeline order) with a `locked` flag per
+    // sub-status — locked = true when moving there would be backward movement (not allowed).
+    // Dropped is never locked. Used so dropdowns show the full picture instead of hiding stages.
+    function allSubStatusesWithLock(currentSub) {
+      const map = state.filterOptions?.sub_statuses || [];
+      const cur = map.find(m => m.sub === currentSub);
+      const curIdx = cur ? map.indexOf(cur) : -1;
+      const order = [];
+      const byGroup = {};
+      map.forEach(m => {
+        if (!byGroup[m.group]) { byGroup[m.group] = []; order.push(m.group); }
+        byGroup[m.group].push(m.sub);
+      });
+      return order.map(group => ({
+        group,
+        subs: byGroup[group].map(sub => {
+          const idx = map.findIndex(m => m.sub === sub && m.group === group);
+          const locked = group !== 'Dropped' && !(curIdx >= 0 && idx >= curIdx);
+          return { sub, locked };
+        })
+      }));
+    }
+
     async function uploadCampaignFile(campaignId, kind, file) {
       const ext = file.name.split('.').pop();
       const path = `${campaignId}/${kind}-${Date.now()}.${ext}`;
@@ -1782,10 +1805,18 @@
       const fields = {};
       const conditionalArea = el('div', { class: 'space-y-2 pt-2 border-t border-slate-200' });
 
-      const subSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
-        el('option', { value: '' }, '— Pick new sub-status —'),
-        ...allowed.map(m => el('option', { value: m.sub }, `${m.sub}  (→ ${m.group})`))
-      );
+      const subSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+      subSel.appendChild(el('option', { value: '' }, '— Pick new sub-status —'));
+      allSubStatusesWithLock(c.sub_status).forEach(({ group, subs }) => {
+        const og = document.createElement('optgroup');
+        og.label = group;
+        subs.forEach(({ sub, locked }) => {
+          const opt = el('option', { value: sub }, locked ? `${sub} (locked — backward)` : sub);
+          if (locked) opt.disabled = true;
+          og.appendChild(opt);
+        });
+        subSel.appendChild(og);
+      });
       fields.sub_status = subSel;
 
       const fuWrap = el('label', { class: 'block' },
@@ -1966,19 +1997,22 @@
         ));
       }
 
-      // Sub-status dropdown grouped by Stage (optgroup)
-      const allowed = isTerminalNow ? [] : allowedSubStatuses(c.sub_status);
-      const groupedByStage = {};
-      allowed.forEach(m => { (groupedByStage[m.group] = groupedByStage[m.group] || []).push(m.sub); });
-
+      // Sub-status dropdown grouped by Stage (optgroup) — shows ALL stages/sub-statuses;
+      // backward ones are visible but disabled (locked) rather than hidden.
       const subSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
       subSel.appendChild(el('option', { value: '' }, '— No stage change —'));
-      Object.entries(groupedByStage).forEach(([stage, subs]) => {
-        const og = document.createElement('optgroup');
-        og.label = stage;
-        subs.forEach(s => og.appendChild(el('option', { value: s }, s)));
-        subSel.appendChild(og);
-      });
+      if (!isTerminalNow) {
+        allSubStatusesWithLock(c.sub_status).forEach(({ group, subs }) => {
+          const og = document.createElement('optgroup');
+          og.label = group;
+          subs.forEach(({ sub, locked }) => {
+            const opt = el('option', { value: sub }, locked ? `${sub} (locked — backward)` : sub);
+            if (locked) opt.disabled = true;
+            og.appendChild(opt);
+          });
+          subSel.appendChild(og);
+        });
+      }
       fields.sub_status = subSel;
 
       if (!isTerminalNow) {
@@ -2206,7 +2240,7 @@
             )
           ),
           el('div', { class: 'flex flex-wrap gap-2' },
-            !isTerminal && canEdit ? el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand', onClick: () => openLogActivityModal(c) }, '+ Log activity / Update stage') : null,
+            canEdit ? el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand', onClick: () => openLogActivityModal(c) }, isTerminal ? '+ Log activity' : '+ Log activity / Update stage') : null,
             canEdit ? el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-md hover:bg-slate-50 text-slate-700', onClick: () => openReassignModal(c) }, 'Reassign') : null,
           )
         )
