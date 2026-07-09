@@ -1143,14 +1143,28 @@
         reportsState.to = t.toISOString().slice(0, 10);
         reportsState.from = f.toISOString().slice(0, 10);
       }
-      const [{ data: d, error: e1 }, { data: tg, error: e2 }] = await Promise.all([
+      const rangeStart = reportsState.from;
+      const rangeEnd = reportsState.to + 'T23:59:59';
+      const [{ data: d, error: e1 }, { data: tg, error: e2 }, { data: rawScouts, error: e3 }, { data: rawFollowups, error: e4 }] = await Promise.all([
         supabase.rpc('reports_data', { d_from: reportsState.from, d_to: reportsState.to }),
         supabase.rpc('reachout_target_report', { d_from: reportsState.from, d_to: reportsState.to }),
+        supabase.from('platforms').select('created_at').gte('created_at', rangeStart).lte('created_at', rangeEnd),
+        supabase.from('campaign_activities').select('created_at').gte('created_at', rangeStart).lte('created_at', rangeEnd),
       ]);
       if (e1) { toast(e1.message, 'error'); return; }
       if (e2) { toast(e2.message, 'error'); }
       reportsState.data = d;
       reportsState.targets = tg;
+      // The RPC's own hourly bucketing has a known bug (correlated subquery mismatches hours across
+      // different days), so recompute hourly counts here directly from raw rows instead of trusting d.hourly.
+      if (!e3 && !e4) {
+        const newByHr = Array(24).fill(0), fuByHr = Array(24).fill(0);
+        (rawScouts || []).forEach(r => newByHr[new Date(r.created_at).getHours()]++);
+        (rawFollowups || []).forEach(r => fuByHr[new Date(r.created_at).getHours()]++);
+        reportsState.hourly = Array.from({ length: 24 }, (_, hr) => ({ hr, new_count: newByHr[hr], fu_count: fuByHr[hr] }));
+      } else {
+        reportsState.hourly = d?.hourly || [];
+      }
     }
 
     function viewReports() {
@@ -1298,8 +1312,8 @@
       setTimeout(() => {
         if (window.Chart && document.getElementById('rep-hourly')) {
           const hours = Array.from({length: 24}, (_, i) => i);
-          const newData = hours.map(h => { const e = (d.hourly || []).find(x => x.hr === h); return e ? e.new_count : 0; });
-          const fuData  = hours.map(h => { const e = (d.hourly || []).find(x => x.hr === h); return e ? e.fu_count : 0; });
+          const newData = hours.map(h => { const e = (reportsState.hourly || []).find(x => x.hr === h); return e ? e.new_count : 0; });
+          const fuData  = hours.map(h => { const e = (reportsState.hourly || []).find(x => x.hr === h); return e ? e.fu_count : 0; });
           new Chart(document.getElementById('rep-hourly'), {
             type: 'bar',
             data: { labels: hours.map(h => `${h}:00`), datasets: [
