@@ -1412,31 +1412,33 @@
           el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-white border border-slate-200 hover:bg-slate-50 text-slate-700',
             onClick: async () => {
               const { data, error } = await supabase.from('platforms')
-                .select(`created_at, platform, username, profile:profiles ( name ), agent:team_members!created_by ( full_name )`)
+                .select(`created_at, platform, username, profile:profiles ( name, email, region ), agent:team_members!created_by ( full_name )`)
                 .gte('created_at', reportsState.from).lte('created_at', reportsState.to + 'T23:59:59')
                 .order('created_at', { ascending: false });
               if (error) return toast(error.message, 'error');
               if (!data || !data.length) return toast('No new scouts in this range', 'error');
-              const rows = data.map(p => ({ date: p.created_at, agent: p.agent?.full_name || '', profile: p.profile?.name || '', platform: p.platform || '', username: p.username || '' }));
+              const rows = data.map(p => ({ date: p.created_at, agent: p.agent?.full_name || '', profile: p.profile?.name || '', email: p.profile?.email || '', geo: p.profile?.region || '', platform: p.platform || '', username: p.username || '' }));
               downloadCSV(`new-scouts_${reportsState.from}_to_${reportsState.to}.csv`,
                 toCSV(rows, [
                   { label: 'Date', value: 'date' }, { label: 'Agent', value: 'agent' },
-                  { label: 'Profile', value: 'profile' }, { label: 'Platform', value: 'platform' }, { label: 'Username', value: 'username' }
+                  { label: 'Profile', value: 'profile' }, { label: 'Email', value: 'email' }, { label: 'Geo', value: 'geo' },
+                  { label: 'Platform', value: 'platform' }, { label: 'Username', value: 'username' }
                 ]));
             } }, '⬇ New scouts (raw)'),
           el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-white border border-slate-200 hover:bg-slate-50 text-slate-700',
             onClick: async () => {
               const { data, error } = await supabase.from('campaign_activities')
-                .select(`created_at, activity_type, note, campaign:campaigns ( name ), user:team_members!campaign_activities_user_id_fkey ( full_name )`)
+                .select(`created_at, activity_type, note, campaign:campaigns ( name, platform:platforms ( profile:profiles ( email, region ) ) ), user:team_members!campaign_activities_user_id_fkey ( full_name )`)
                 .gte('created_at', reportsState.from).lte('created_at', reportsState.to + 'T23:59:59')
                 .order('created_at', { ascending: false });
               if (error) return toast(error.message, 'error');
               if (!data || !data.length) return toast('No follow-ups in this range', 'error');
-              const rows = data.map(a => ({ date: a.created_at, agent: a.user?.full_name || '', campaign: a.campaign?.name || '', type: a.activity_type, note: a.note || '' }));
+              const rows = data.map(a => ({ date: a.created_at, agent: a.user?.full_name || '', campaign: a.campaign?.name || '', email: a.campaign?.platform?.profile?.email || '', geo: a.campaign?.platform?.profile?.region || '', type: a.activity_type, note: a.note || '' }));
               downloadCSV(`follow-ups_${reportsState.from}_to_${reportsState.to}.csv`,
                 toCSV(rows, [
                   { label: 'Date', value: 'date' }, { label: 'Agent', value: 'agent' },
-                  { label: 'Campaign', value: 'campaign' }, { label: 'Type', value: 'type' }, { label: 'Note', value: 'note' }
+                  { label: 'Campaign', value: 'campaign' }, { label: 'Email', value: 'email' }, { label: 'Geo', value: 'geo' },
+                  { label: 'Type', value: 'type' }, { label: 'Note', value: 'note' }
                 ]));
             } }, '⬇ Follow-ups (raw)'),
           el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-white border border-slate-200 hover:bg-slate-50 text-slate-700',
