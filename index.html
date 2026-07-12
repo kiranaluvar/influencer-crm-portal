@@ -965,6 +965,20 @@
       followupsCache.items = data || [];
     }
 
+    // Standalone PDF agreement generator, kept fully isolated in its own file/iframe so its
+    // own DOM IDs and script never collide with the main app.
+    function viewAgreementForm() {
+      return el('div', { class: 'h-full flex flex-col' },
+        pageHeader('Documents', 'Agreement Form', 'Generate a personalised influencer agreement PDF', null),
+        el('iframe', {
+          src: 'agreement-form.html',
+          title: 'Influencer Agreement Form',
+          style: 'width:100%; height:calc(100vh - 160px); border:1px solid #e2e8f0; border-radius:10px; background:#fff;',
+          sandbox: 'allow-scripts allow-downloads allow-same-origin allow-popups'
+        })
+      );
+    }
+
     function viewFollowups() {
       const items = followupsCache.items;
       const now = new Date();
@@ -2566,6 +2580,7 @@
       campaigns: { label: 'Campaigns', icon: '🎯', view: viewCampaigns, prefetch: fetchCampaigns },
       profiles:  { label: 'Profiles',  icon: '👤', view: viewProfiles,  prefetch: fetchProfiles },
       followups: { label: 'Follow-ups', icon: '⏰', view: viewFollowups, prefetch: fetchFollowups },
+      agreement: { label: 'Agreement Form', icon: '📄', view: viewAgreementForm },
       reports:   { label: 'Reports',    icon: '📈', view: viewReports,   prefetch: fetchReports, adminOnly: true },
       team:      { label: 'Team',       icon: '👥', view: viewTeam,      prefetch: fetchTeam,    adminOnly: true },
     };
