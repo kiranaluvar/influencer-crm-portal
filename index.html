@@ -1920,6 +1920,13 @@
     // Auto-builds the tracking URL from Course ID, fmt, campaign name/date, platform, and collab type.
     // Medium codes are inferred from the one example we have (Youtube -> YTC) and extended consistently;
     // the UTM Link field stays editable so an agent can correct it if a platform's code is wrong.
+    // Course ID / fmt are fixed per subject rather than typed manually. Only Math is configured so far —
+    // add more subjects here once their Course ID / fmt values are provided.
+    const SUBJECT_COURSE_MAP = {
+      Math: { courseId: '15', fmt: '206' },
+      Coding: { courseId: '1', fmt: '132' },
+    };
+
     const PLATFORM_MEDIUM_CODE = { Instagram: 'IGC', Youtube: 'YTC', Facebook: 'FBC', Tiktok: 'TTC' };
     function buildUtmLink(c, fields) {
       const courseId = fields._course_id?.value.trim();
@@ -1984,8 +1991,18 @@
         if (target === 'Gone Live') {
           fields.gone_live_date = el('input', { type: 'date', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
           fields.spends_inr     = el('input', { type: 'number', step: '0.01', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
-          fields._course_id     = el('input', { type: 'text', placeholder: 'e.g. 15', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
-          fields._fmt            = el('input', { type: 'text', placeholder: 'e.g. 206', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields._course_id     = el('input', { type: 'hidden' });
+          fields._fmt            = el('input', { type: 'hidden' });
+          fields._subject        = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+            el('option', { value: '' }, '—'),
+            ...Object.keys(SUBJECT_COURSE_MAP).map(s => el('option', { value: s }, s))
+          );
+          fields._subject.addEventListener('change', () => {
+            const m = SUBJECT_COURSE_MAP[fields._subject.value];
+            fields._course_id.value = m ? m.courseId : '';
+            fields._fmt.value = m ? m.fmt : '';
+            buildUtmLink(c, fields);
+          });
           fields.utm_link       = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
           fields.utm_medium     = el('input', { type: 'text', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
           fields.utm_content    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
@@ -1999,13 +2016,12 @@
           );
           fields.rcb_count      = el('input', { type: 'number', disabled: true, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md disabled:bg-slate-100' });
           fields.is_recollab.addEventListener('change', () => { fields.rcb_count.disabled = fields.is_recollab.value !== 'true'; buildUtmLink(c, fields); });
-          [fields._course_id, fields._fmt, fields.gone_live_date].forEach(inp => inp.addEventListener('input', () => buildUtmLink(c, fields)));
+          fields.gone_live_date.addEventListener('input', () => buildUtmLink(c, fields));
 
           [
             ['Gone Live Date *', fields.gone_live_date],
             ['Spends (₹) *', fields.spends_inr],
-            ['Course ID * (for tracking link)', fields._course_id],
-            ['Format / fmt * (for tracking link)', fields._fmt],
+            ['Subject * (sets Course ID / fmt for tracking link)', fields._subject],
             ['UTM Link * (auto-generated — editable)', fields.utm_link],
             ['UTM Medium (auto-filled from platform)', fields.utm_medium],
             ['UTM Content * (drives auto-task)', fields.utm_content],
@@ -2197,8 +2213,18 @@
         if (target === 'Gone Live') {
           fields.gone_live_date = el('input', { type: 'date', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
           fields.spends_inr     = el('input', { type: 'number', step: '0.01', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
-          fields._course_id     = el('input', { type: 'text', placeholder: 'e.g. 15', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
-          fields._fmt            = el('input', { type: 'text', placeholder: 'e.g. 206', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields._course_id     = el('input', { type: 'hidden' });
+          fields._fmt            = el('input', { type: 'hidden' });
+          fields._subject        = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+            el('option', { value: '' }, '—'),
+            ...Object.keys(SUBJECT_COURSE_MAP).map(s => el('option', { value: s }, s))
+          );
+          fields._subject.addEventListener('change', () => {
+            const m = SUBJECT_COURSE_MAP[fields._subject.value];
+            fields._course_id.value = m ? m.courseId : '';
+            fields._fmt.value = m ? m.fmt : '';
+            buildUtmLink(c, fields);
+          });
           fields.utm_link       = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
           fields.utm_medium     = el('input', { type: 'text', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
           fields.utm_content    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
@@ -2212,14 +2238,13 @@
           );
           fields.rcb_count      = el('input', { type: 'number', disabled: true, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md disabled:bg-slate-100' });
           fields.is_recollab.addEventListener('change', () => { fields.rcb_count.disabled = fields.is_recollab.value !== 'true'; buildUtmLink(c, fields); });
-          [fields._course_id, fields._fmt, fields.gone_live_date].forEach(inp => inp.addEventListener('input', () => buildUtmLink(c, fields)));
+          fields.gone_live_date.addEventListener('input', () => buildUtmLink(c, fields));
 
           conditionalArea.appendChild(el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-emerald-700 pt-1' }, 'Gone Live — required fields'));
           [
             ['Gone Live Date *', fields.gone_live_date],
             ['Spends (₹) *', fields.spends_inr],
-            ['Course ID * (for tracking link)', fields._course_id],
-            ['Format / fmt * (for tracking link)', fields._fmt],
+            ['Subject * (sets Course ID / fmt for tracking link)', fields._subject],
             ['UTM Link * (auto-generated — editable)', fields.utm_link],
             ['UTM Medium (auto-filled from platform)', fields.utm_medium],
             ['UTM Content * (drives auto-task)', fields.utm_content],
