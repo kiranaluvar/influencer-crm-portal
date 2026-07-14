@@ -2004,7 +2004,7 @@
             buildUtmLink(c, fields);
           });
           fields.utm_link       = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
-          fields.utm_medium     = el('input', { type: 'text', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.utm_medium     = el('input', { type: 'hidden' });
           fields.utm_content    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
             el('option', { value: '' }, '—'),
             ...(state.filterOptions?.utm_content || []).map(u => el('option', { value: u }, u))
@@ -2023,9 +2023,8 @@
             ['Spends (₹) *', fields.spends_inr],
             ['Subject * (sets Course ID / fmt for tracking link)', fields._subject],
             ['UTM Link * (auto-generated — editable)', fields.utm_link],
-            ['UTM Medium (auto-filled from platform)', fields.utm_medium],
-            ['UTM Content * (drives auto-task)', fields.utm_content],
-            ['Collab Type *', fields.is_recollab],
+            ['UTM Medium * (drives auto-task)', fields.utm_content],
+            ['UTM Content *', fields.is_recollab],
             ['RCB Count (if Re-collab)', fields.rcb_count],
           ].forEach(([lbl, inp]) => conditionalArea.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, lbl), inp)));
         }
@@ -2226,7 +2225,7 @@
             buildUtmLink(c, fields);
           });
           fields.utm_link       = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
-          fields.utm_medium     = el('input', { type: 'text', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.utm_medium     = el('input', { type: 'hidden' });
           fields.utm_content    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
             el('option', { value: '' }, '—'),
             ...(state.filterOptions?.utm_content || []).map(u => el('option', { value: u }, u))
@@ -2246,9 +2245,8 @@
             ['Spends (₹) *', fields.spends_inr],
             ['Subject * (sets Course ID / fmt for tracking link)', fields._subject],
             ['UTM Link * (auto-generated — editable)', fields.utm_link],
-            ['UTM Medium (auto-filled from platform)', fields.utm_medium],
-            ['UTM Content * (drives auto-task)', fields.utm_content],
-            ['Collab Type *', fields.is_recollab],
+            ['UTM Medium * (drives auto-task)', fields.utm_content],
+            ['UTM Content *', fields.is_recollab],
             ['RCB Count (if Re-collab)', fields.rcb_count],
           ].forEach(([lbl, inp]) => conditionalArea.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, lbl), inp)));
         }
@@ -2520,17 +2518,20 @@
           : el('div', { class: 'text-sm text-slate-400 text-center py-6' }, 'No activity yet')
       );
 
-      // Audit (collapsed)
+      // Audit — expanded by default so it's actually visible, not hidden behind a collapsed toggle
       const audit = state.detail.audit;
-      const auditWrap = audit.length ? el('details', { class: 'bg-white border border-slate-200 rounded-lg p-4 mt-3' },
+      const auditWrap = el('details', { class: 'bg-white border border-slate-200 rounded-lg p-4 mt-3', open: true },
         el('summary', { class: 'text-sm font-semibold cursor-pointer' }, `Change history (${audit.length})`),
-        el('div', { class: 'mt-3 space-y-2 text-xs' },
-          ...audit.map(a => el('div', { class: 'flex justify-between gap-2 pb-2 border-b border-slate-100 last:border-0' },
-            el('div', {}, el('div', { class: 'text-slate-700' }, JSON.stringify(a.diff)), el('div', { class: 'text-slate-400 text-[10px]' }, a.user?.full_name || '—')),
-            el('div', { class: 'text-slate-400' }, fmtDateTime(a.changed_at))
+        audit.length ? el('div', { class: 'mt-3 space-y-2 text-xs' },
+          ...audit.map(a => el('div', { class: 'flex justify-between gap-3 pb-2 border-b border-slate-100 last:border-0' },
+            el('div', { class: 'min-w-0' },
+              el('pre', { class: 'text-slate-700 whitespace-pre-wrap break-words font-mono text-[11px] bg-slate-50 rounded px-2 py-1' }, JSON.stringify(a.diff, null, 2)),
+              el('div', { class: 'text-slate-400 text-[10px] mt-1' }, a.user?.full_name || '—')
+            ),
+            el('div', { class: 'text-slate-400 shrink-0' }, fmtDateTime(a.changed_at))
           ))
-        )
-      ) : null;
+        ) : el('div', { class: 'mt-3 text-xs text-slate-400' }, 'No changes logged yet')
+      );
 
       return el('div', {},
         header,
