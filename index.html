@@ -118,6 +118,18 @@
 
     const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
     const fmtDateTime = (d) => d ? new Date(d).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '—';
+    const relativeTime = (d) => {
+      if (!d) return '—';
+      const dt = new Date(d);
+      const now = new Date();
+      const startOfDay = (x) => { const y = new Date(x); y.setHours(0,0,0,0); return y; };
+      const diffDays = Math.round((startOfDay(now) - startOfDay(dt)) / 86400000);
+      const time = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+      if (diffDays === 0) return `Today ${time}`;
+      if (diffDays === 1) return 'Yesterday';
+      if (diffDays > 1 && diffDays < 7) return `${diffDays} days ago`;
+      return fmtDate(d);
+    };
     const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
     const groupStatusColor = (g) => ({
@@ -2107,7 +2119,10 @@
         await supabase.from('campaign_activities').insert({
           campaign_id: c.id, user_id: state.me.user_id, activity_type: 'stage_change',
           note: `${c.sub_status} → ${target}`,
-          metadata: { from: c.sub_status, to: target },
+          metadata: {
+            from: c.sub_status, to: target,
+            ...(payload.next_followup_at ? { followup_at: payload.next_followup_at, followup_note: payload.next_followup_note, followup_prev_at: c.next_followup_at || null } : {})
+          },
         });
 
         modal.close();
@@ -2296,10 +2311,17 @@
 
         submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
 
+        const followUpMeta = needsFollowup ? {
+          followup_at: new Date(fields.next_followup_at.value).toISOString(),
+          followup_note: fields.next_followup_note.value.trim() || null,
+          followup_prev_at: c.next_followup_at || null,
+        } : null;
+
         // 1. Log the activity itself
         const { error: aErr } = await supabase.from('campaign_activities').insert({
           campaign_id: c.id, user_id: state.me.user_id,
-          activity_type: fields.activity_type.value, note: fields.note.value.trim() || null
+          activity_type: fields.activity_type.value, note: fields.note.value.trim() || null,
+          metadata: followUpMeta,
         });
         if (aErr) { submitBtn.disabled = false; submitBtn.textContent = 'Save'; return toast(aErr.message, 'error'); }
 
@@ -2339,7 +2361,7 @@
             await supabase.from('campaign_activities').insert({
               campaign_id: c.id, user_id: state.me.user_id, activity_type: 'stage_change',
               note: `${c.sub_status} → ${target}`,
-              metadata: { from: c.sub_status, to: target },
+              metadata: { from: c.sub_status, to: target, ...(followUpMeta || {}) },
             });
           }
         }
@@ -2499,22 +2521,31 @@
 
       // Activity timeline
       const acts = state.detail.activities;
+      const ACTIVITY_BORDER = { call: 'border-blue-400', whatsapp: 'border-emerald-400', email: 'border-purple-400', dm: 'border-indigo-400', comment: 'border-slate-300', stage_change: 'border-amber-400' };
+      const renderActivity = (a, isLatest) => {
+        const meta = a.metadata || {};
+        const isPending = isLatest && meta.followup_at && new Date(meta.followup_at) > new Date();
+        return el('div', { class: `flex items-start justify-between gap-3 pl-3 py-2.5 border-l-4 ${ACTIVITY_BORDER[a.activity_type] || 'border-slate-300'} bg-slate-50/60 rounded-r-md` },
+          el('div', { class: 'min-w-0 flex-1' },
+            el('div', { class: 'flex items-center gap-2 flex-wrap text-sm' },
+              el('span', { class: 'font-semibold text-slate-800 capitalize' }, a.activity_type.replace('_', ' ')),
+              (meta.from && meta.to) ? el('span', { class: 'text-xs text-slate-500' }, '→ ', el('span', { class: 'font-medium text-slate-700' }, meta.to)) : null,
+              isPending ? el('span', { class: 'badge bg-amber-100 text-amber-800' }, 'PENDING') : null
+            ),
+            a.note ? el('div', { class: 'text-sm text-slate-600 mt-0.5 whitespace-pre-wrap' }, a.note) : null,
+            meta.followup_prev_at ? el('div', { class: 'text-xs text-slate-400 mt-1' }, `Follow-up scheduled from ${fmtDate(meta.followup_prev_at)}`) : null,
+            meta.followup_at ? el('div', { class: 'text-xs text-slate-400' }, `Follow-up planned: ${fmtDate(meta.followup_at)}`) : null
+          ),
+          el('div', { class: 'flex flex-col items-end gap-1 shrink-0' },
+            avatar(a.user?.full_name, 22),
+            el('span', { class: 'text-[11px] text-slate-400' }, isPending ? `Scheduled for ${fmtDate(meta.followup_at)}` : relativeTime(a.created_at))
+          )
+        );
+      };
       const timeline = el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
-        el('h3', { class: 'text-sm font-semibold mb-3' }, `Activity (${acts.length})`),
+        el('h3', { class: 'text-sm font-semibold mb-3' }, `Activity timeline (${acts.length})`),
         acts.length
-          ? el('div', { class: 'space-y-3' },
-              ...acts.map(a => el('div', { class: 'flex gap-3 pb-3 border-b border-slate-100 last:border-0' },
-                el('div', { class: 'w-2 h-2 mt-2 rounded-full bg-blue-500 shrink-0' }),
-                el('div', { class: 'flex-1' },
-                  el('div', { class: 'flex justify-between gap-2 flex-wrap text-xs' },
-                    el('span', { class: 'font-medium text-slate-700' }, `${a.activity_type}${a.user?.full_name ? ' · ' + a.user.full_name : ''}`),
-                    el('span', { class: 'text-slate-400' }, fmtDateTime(a.created_at))
-                  ),
-                  a.note ? el('div', { class: 'text-sm text-slate-600 mt-1 whitespace-pre-wrap' }, a.note) : null,
-                  a.metadata ? el('div', { class: 'text-[11px] text-slate-400 mt-1' }, JSON.stringify(a.metadata)) : null
-                )
-              ))
-            )
+          ? el('div', { class: 'space-y-2' }, ...acts.map((a, i) => renderActivity(a, i === 0)))
           : el('div', { class: 'text-sm text-slate-400 text-center py-6' }, 'No activity yet')
       );
 
