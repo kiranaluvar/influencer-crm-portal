@@ -36,6 +36,11 @@
     .modal-backdrop { background: rgba(15,23,42,0.5); backdrop-filter: blur(2px); }
     .fade-in { animation: fade 0.15s ease-out; }
     @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    @keyframes confetti-fall {
+      0%   { transform: translateY(-10vh) translateX(0) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(110vh) translateX(var(--drift)) rotate(var(--spin)); opacity: 0.9; }
+    }
+    .confetti-piece { position: fixed; top: 0; z-index: 9999; pointer-events: none; will-change: transform; animation: confetti-fall linear forwards; }
     @media (max-width: 768px) {
       .sidebar-mobile { transform: translateX(-100%); transition: transform 0.2s; }
       .sidebar-mobile.open { transform: translateX(0); }
@@ -230,6 +235,31 @@
       document.body.appendChild(t);
       setTimeout(() => t.remove(), 3000);
     };
+
+    // Confetti burst for the "campaign just went Gone Live" moment — pure CSS/JS, no external library.
+    function celebrateGoneLive() {
+      const colors = ['#4060f0', '#f0d000', '#f08000', '#40d060', '#40c0f0', '#f04040'];
+      const count = 90;
+      for (let i = 0; i < count; i++) {
+        const size = 6 + Math.random() * 6;
+        const isCircle = Math.random() > 0.5;
+        const piece = el('div', {
+          class: 'confetti-piece',
+          style: `
+            left:${Math.random() * 100}vw;
+            width:${size}px; height:${size * (isCircle ? 1 : 0.5)}px;
+            background:${colors[Math.floor(Math.random() * colors.length)]};
+            border-radius:${isCircle ? '50%' : '2px'};
+            --drift:${(Math.random() - 0.5) * 300}px;
+            --spin:${(Math.random() > 0.5 ? 1 : -1) * (360 + Math.random() * 720)}deg;
+            animation-duration:${2.5 + Math.random() * 1.5}s;
+            animation-delay:${Math.random() * 0.4}s;
+          `
+        });
+        document.body.appendChild(piece);
+        setTimeout(() => piece.remove(), 4500);
+      }
+    }
 
     const confirmModal = (msg) => new Promise(res => {
       const m = renderModal('Confirm', el('div', { class: 'space-y-4' },
@@ -2131,6 +2161,7 @@
 
         modal.close();
         toast(`Status updated to ${target}`, 'success');
+        if (target === 'Gone Live') celebrateGoneLive();
         await fetchCampaignDetail(c.id);
         render();
       });
@@ -2373,6 +2404,7 @@
 
         modal.close();
         toast('Saved', 'success');
+        if (target === 'Gone Live') celebrateGoneLive();
         await fetchCampaignDetail(c.id);
         render();
       });
