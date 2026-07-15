@@ -2406,6 +2406,82 @@
       const modal = renderModal('Reassign Campaign Owner', wrap);
     }
 
+    // Lets an already-Gone-Live campaign's details (date/spends/UTM/collab type) be edited directly —
+    // useful for regenerating a UTM link after the format changes, without touching sub_status.
+    function openEditGoneLiveModal(c) {
+      const fields = {};
+      const wrap = el('div', { class: 'space-y-3' });
+
+      fields.gone_live_date = el('input', { type: 'date', value: c.gone_live_date || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+      fields.spends_inr     = el('input', { type: 'number', step: '0.01', value: c.spends_inr ?? '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+      fields._course_id     = el('input', { type: 'hidden' });
+      fields._fmt            = el('input', { type: 'hidden' });
+      fields._subject        = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+        el('option', { value: '' }, '— Pick to regenerate link —'),
+        ...Object.keys(SUBJECT_COURSE_MAP).map(s => el('option', { value: s }, s))
+      );
+      fields._subject.addEventListener('change', () => {
+        const m = SUBJECT_COURSE_MAP[fields._subject.value];
+        fields._course_id.value = m ? m.courseId : '';
+        fields._fmt.value = m ? m.fmt : '';
+        buildUtmLink(c, fields);
+      });
+      fields.utm_link       = el('input', { type: 'url', value: c.utm_link || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+      fields.utm_medium     = el('input', { type: 'hidden', value: c.utm_medium || '' });
+      fields.utm_content    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+        el('option', { value: '' }, '—'),
+        ...(state.filterOptions?.utm_content || []).map(u => el('option', { value: u, selected: c.utm_content === u }, u))
+      );
+      fields.is_recollab    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+        el('option', { value: '', selected: c.is_recollab == null }, '—'),
+        el('option', { value: 'false', selected: c.is_recollab === false }, 'New collab'),
+        el('option', { value: 'true', selected: c.is_recollab === true }, 'Re-collab (RCB)')
+      );
+      fields.rcb_count      = el('input', { type: 'number', value: c.rcb_count ?? '', disabled: !c.is_recollab, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md disabled:bg-slate-100' });
+      fields.is_recollab.addEventListener('change', () => { fields.rcb_count.disabled = fields.is_recollab.value !== 'true'; buildUtmLink(c, fields); });
+      fields.gone_live_date.addEventListener('input', () => buildUtmLink(c, fields));
+
+      wrap.appendChild(el('p', { class: 'text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5' },
+        'Pick a Subject below to regenerate the UTM Link in the current format. Leave it on "—" to keep the UTM Link as-is and just edit the other fields.'
+      ));
+      [
+        ['Gone Live Date', fields.gone_live_date],
+        ['Spends (₹)', fields.spends_inr],
+        ['Subject (regenerates UTM Link)', fields._subject],
+        ['UTM Link (editable)', fields.utm_link],
+        ['UTM Medium *', fields.utm_content],
+        ['UTM Content *', fields.is_recollab],
+        ['RCB Count (if Re-collab)', fields.rcb_count],
+      ].forEach(([lbl, inp]) => wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, lbl), inp)));
+
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Save changes');
+      submitBtn.addEventListener('click', async () => {
+        const payload = {
+          gone_live_date: fields.gone_live_date.value || null,
+          spends_inr:     fields.spends_inr.value ? parseFloat(fields.spends_inr.value) : null,
+          utm_link:       fields.utm_link.value.trim() || null,
+          utm_medium:     fields.utm_medium.value.trim() || null,
+          utm_content:    fields.utm_content.value || null,
+          is_recollab:    fields.is_recollab.value === 'true' ? true : fields.is_recollab.value === 'false' ? false : null,
+          rcb_count:      fields.rcb_count.value ? parseInt(fields.rcb_count.value) : null,
+        };
+        submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
+        const { error } = await supabase.from('campaigns').update(payload).eq('id', c.id);
+        submitBtn.disabled = false; submitBtn.textContent = 'Save changes';
+        if (error) return toast(error.message, 'error');
+        modal.close();
+        toast('Gone Live details updated', 'success');
+        await fetchCampaignDetail(c.id);
+        render();
+      });
+
+      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-slate-200' },
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+        submitBtn
+      ));
+      const modal = renderModal('Edit Gone Live Details', wrap);
+    }
+
     // ===============================================================
     // CAMPAIGN DETAIL VIEW
     // ===============================================================
@@ -2506,7 +2582,10 @@
 
       // Gone Live block (if filled)
       const goneLiveBlock = (c.gone_live_date || c.spends_inr) ? el('div', { class: 'bg-white border border-emerald-200 rounded-lg p-4 mb-3' },
-        el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-emerald-700 mb-2' }, 'Gone Live'),
+        el('div', { class: 'flex items-center justify-between mb-2' },
+          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-emerald-700' }, 'Gone Live'),
+          canEdit ? el('button', { class: 'text-xs text-brand hover:underline', onClick: () => openEditGoneLiveModal(c) }, 'Edit') : null
+        ),
         el('div', { class: 'grid grid-cols-2 gap-2 text-xs' },
           el('div', {}, el('span', { class: 'text-slate-500' }, 'Date: '), fmtDate(c.gone_live_date)),
           el('div', {}, el('span', { class: 'text-slate-500' }, 'Spends: '), c.spends_inr ? `₹${c.spends_inr}` : '—'),
