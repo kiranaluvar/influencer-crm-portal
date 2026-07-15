@@ -31,7 +31,7 @@
     .border-brand { border-color: var(--brand); }
     .ring-brand:focus { box-shadow: 0 0 0 2px var(--brand); outline: none; }
     .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
-    .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #d6d3d1; border-radius: 3px; }
     .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
     .modal-backdrop { background: rgba(15,23,42,0.5); backdrop-filter: blur(2px); }
     .fade-in { animation: fade 0.15s ease-out; }
@@ -60,7 +60,7 @@
     }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-900 antialiased">
+<body class="bg-stone-50 text-stone-900 antialiased">
   <div id="app"></div>
 
   <script type="module">
@@ -138,7 +138,7 @@
     const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
     const groupStatusColor = (g) => ({
-      'Scraping':             'bg-slate-100 text-slate-700',
+      'Scraping':             'bg-stone-100 text-stone-700',
       'Screening':            'bg-blue-50 text-blue-700',
       'Negotiation':          'bg-amber-50 text-amber-800',
       'Integration Planning': 'bg-purple-50 text-purple-700',
@@ -146,7 +146,7 @@
       'Gone Live':            'bg-emerald-50 text-emerald-700',
       'Post Gone Live':       'bg-emerald-100 text-emerald-900',
       'Dropped':              'bg-rose-50 text-rose-700',
-    }[g] || 'bg-slate-100 text-slate-700');
+    }[g] || 'bg-stone-100 text-stone-700');
 
     // --- UI helpers (Direction 3 design system) ---
     const AVATAR_PALETTE = [
@@ -176,11 +176,11 @@
 
     function pageHeader(eyebrow, title, subtitle, actions) {
       return el('div', { class: 'mb-5' },
-        eyebrow ? el('div', { class: 'text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mb-1.5' }, eyebrow) : null,
+        eyebrow ? el('div', { class: 'text-[10px] font-semibold text-stone-400 uppercase tracking-[0.08em] mb-1.5' }, eyebrow) : null,
         el('div', { class: 'flex items-end justify-between gap-4 flex-wrap' },
           el('div', {},
-            el('h1', { class: 'text-[22px] font-semibold tracking-tight text-slate-900' }, title),
-            subtitle ? el('p', { class: 'text-[13px] text-slate-500 mt-0.5' }, subtitle) : null
+            el('h1', { class: 'text-[22px] font-semibold tracking-tight text-stone-900' }, title),
+            subtitle ? el('p', { class: 'text-[13px] text-stone-500 mt-0.5' }, subtitle) : null
           ),
           actions ? el('div', { class: 'flex gap-2 items-center' }, ...(Array.isArray(actions) ? actions.filter(Boolean) : [actions])) : null
         )
@@ -189,7 +189,7 @@
 
     function subtleBadge(text, variant = 'slate') {
       const map = {
-        slate:   'bg-slate-100 text-slate-700',
+        slate:   'bg-stone-100 text-stone-700',
         info:    'bg-blue-50 text-blue-700',
         warning: 'bg-amber-50 text-amber-800',
         success: 'bg-emerald-50 text-emerald-700',
@@ -201,9 +201,9 @@
       return el('span', { class: `inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${map[variant] || map.slate}` }, text);
     }
 
-    function kpiTile(label, value, valueColor = 'text-slate-900') {
-      return el('div', { class: 'bg-slate-50 rounded-md px-3 py-2.5' },
-        el('div', { class: 'text-[10px] text-slate-500 uppercase tracking-wide font-medium' }, label),
+    function kpiTile(label, value, valueColor = 'text-stone-900') {
+      return el('div', { class: 'bg-stone-50 rounded-lg px-3 py-2.5' },
+        el('div', { class: 'text-[10px] text-stone-500 uppercase tracking-wide font-medium' }, label),
         el('div', { class: `text-[18px] font-semibold mt-0.5 ${valueColor}` }, String(value))
       );
     }
@@ -219,7 +219,7 @@
           const v = variants[g];
           const cls = subtleBadge('', v).className; // reuse color mapping
           return el('button', {
-            class: `text-left px-3 py-2 rounded-md ${cls.replace('inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ','')} hover:ring-1 hover:ring-slate-300 transition`,
+            class: `text-left px-3 py-2 rounded-lg ${cls.replace('inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ','')} hover:ring-1 hover:ring-stone-300 transition`,
             onClick: () => onClick && onClick(g),
           },
             el('div', { class: 'text-[10px] uppercase tracking-wide font-medium opacity-80' }, labels[g]),
@@ -230,8 +230,8 @@
     }
 
     const toast = (msg, type = 'info') => {
-      const colors = { info: 'bg-slate-900', success: 'bg-emerald-600', error: 'bg-rose-600' };
-      const t = el('div', { class: `fixed bottom-6 left-1/2 -translate-x-1/2 ${colors[type]} text-white text-sm px-4 py-2 rounded-lg shadow-lg z-50 fade-in` }, msg);
+      const colors = { info: 'bg-stone-900', success: 'bg-emerald-600', error: 'bg-rose-600' };
+      const t = el('div', { class: `fixed bottom-6 left-1/2 -translate-x-1/2 ${colors[type]} text-white text-sm px-4 py-2 rounded-xl shadow-lg z-50 fade-in` }, msg);
       document.body.appendChild(t);
       setTimeout(() => t.remove(), 3000);
     };
@@ -263,10 +263,10 @@
 
     const confirmModal = (msg) => new Promise(res => {
       const m = renderModal('Confirm', el('div', { class: 'space-y-4' },
-        el('p', { class: 'text-sm text-slate-600' }, msg),
+        el('p', { class: 'text-sm text-stone-600' }, msg),
         el('div', { class: 'flex justify-end gap-2' },
-          el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => { m.close(); res(false); } }, 'Cancel'),
-          el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-slate-900 text-white hover:bg-slate-800', onClick: () => { m.close(); res(true); } }, 'Confirm')
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50', onClick: () => { m.close(); res(false); } }, 'Cancel'),
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-lg bg-stone-900 text-white hover:bg-stone-800', onClick: () => { m.close(); res(true); } }, 'Confirm')
         )
       ));
     });
@@ -417,10 +417,10 @@
     // ===============================================================
     function renderModal(title, content) {
       const backdrop = el('div', { class: 'fixed inset-0 z-40 modal-backdrop flex items-center justify-center p-4 fade-in' });
-      const modal = el('div', { class: 'bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col' },
-        el('div', { class: 'px-5 py-3.5 border-b border-slate-200 flex items-center justify-between' },
-          el('h3', { class: 'font-semibold text-[15px] text-slate-900 tracking-tight' }, title),
-          el('button', { class: 'text-slate-400 hover:text-slate-700 text-2xl leading-none', onClick: () => close() }, '×')
+      const modal = el('div', { class: 'bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col' },
+        el('div', { class: 'px-5 py-3.5 border-b border-stone-200 flex items-center justify-between' },
+          el('h3', { class: 'font-semibold text-[15px] text-stone-900 tracking-tight' }, title),
+          el('button', { class: 'text-stone-400 hover:text-stone-700 text-2xl leading-none', onClick: () => close() }, '×')
         ),
         el('div', { class: 'p-5 overflow-y-auto scrollbar-thin' }, content)
       );
@@ -439,19 +439,19 @@
       const fields = {};
       const mkField = (label, name, type = 'text', opts = {}) => {
         const wrap = el('label', { class: 'block' },
-          el('span', { class: 'text-xs font-medium text-slate-600' }, label + (opts.required ? ' *' : '')),
-          fields[name] = el('input', { type, name, placeholder: opts.placeholder || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' })
+          el('span', { class: 'text-xs font-medium text-stone-600' }, label + (opts.required ? ' *' : '')),
+          fields[name] = el('input', { type, name, placeholder: opts.placeholder || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' })
         );
         return wrap;
       };
       const mkSelect = (label, name, options, opts = {}) => {
-        const sel = el('select', { name, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' },
+        const sel = el('select', { name, class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' },
           el('option', { value: '' }, '— Select —'),
           ...options.map(o => el('option', { value: o }, o))
         );
         fields[name] = sel;
         return el('label', { class: 'block' },
-          el('span', { class: 'text-xs font-medium text-slate-600' }, label + (opts.required ? ' *' : '')),
+          el('span', { class: 'text-xs font-medium text-stone-600' }, label + (opts.required ? ' *' : '')),
           sel
         );
       };
@@ -462,35 +462,35 @@
       const phoneWrap    = mkField('Phone', 'phone', 'tel');
 
       // Region: searchable country dropdown
-      const regionSel = el('select', { name: 'region', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' },
+      const regionSel = el('select', { name: 'region', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' },
         el('option', { value: '' }, '— Select country —'),
         ...COUNTRIES.map(c => el('option', { value: c }, c))
       );
       fields.region = regionSel;
       const regionWrap = el('label', { class: 'block' },
-        el('span', { class: 'text-xs font-medium text-slate-600' }, 'Region'),
+        el('span', { class: 'text-xs font-medium text-stone-600' }, 'Region'),
         regionSel
       );
 
       // Languages: multi-select checkboxes
       const langBoxes = LANGUAGES.map(l => {
-        const cb = el('input', { type: 'checkbox', value: l, class: 'rounded border-slate-300 text-blue-600 focus:ring-blue-500' });
-        return el('label', { class: 'inline-flex items-center gap-1 text-xs px-2 py-1 border border-slate-200 rounded bg-slate-50 cursor-pointer hover:bg-slate-100' }, cb, l);
+        const cb = el('input', { type: 'checkbox', value: l, class: 'rounded border-stone-300 text-blue-600 focus:ring-blue-500' });
+        return el('label', { class: 'inline-flex items-center gap-1 text-xs px-2 py-1 border border-stone-200 rounded bg-stone-50 cursor-pointer hover:bg-stone-100' }, cb, l);
       });
       fields.languages = langBoxes;
       const langWrap = el('div', {},
-        el('span', { class: 'text-xs font-medium text-slate-600 block mb-1' }, 'Languages Known'),
+        el('span', { class: 'text-xs font-medium text-stone-600 block mb-1' }, 'Languages Known'),
         el('div', { class: 'flex flex-wrap gap-1.5' }, ...langBoxes)
       );
 
       // PLATFORM SECTION (mandatory — source of the lead)
-      const platSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' },
+      const platSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' },
         el('option', { value: '' }, '— Select —'),
         ...['Instagram','Youtube','Facebook','Tiktok'].map(p => el('option', { value: p }, p))
       );
       fields.platform = platSel;
       const platWrap = el('label', { class: 'block' },
-        el('span', { class: 'text-xs font-medium text-slate-600' }, 'Platform *'),
+        el('span', { class: 'text-xs font-medium text-stone-600' }, 'Platform *'),
         platSel
       );
       const usernameWrap = mkField('Username *', 'username');
@@ -509,11 +509,11 @@
       };
       fields.lead_type.addEventListener('change', updateHint);
 
-      const sectionHeader = (label) => el('div', { class: 'pt-2 mt-2 border-t border-slate-200' },
-        el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-slate-500' }, label)
+      const sectionHeader = (label) => el('div', { class: 'pt-2 mt-2 border-t border-stone-200' },
+        el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-stone-500' }, label)
       );
 
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Create Profile + Platform');
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand' }, 'Create Profile + Platform');
       submitBtn.addEventListener('click', async () => {
         const checkedLangs = fields.languages.filter(cb => cb.querySelector('input').checked).map(cb => cb.querySelector('input').value);
         const profilePayload = {
@@ -572,8 +572,8 @@
        platWrap, usernameWrap, linkWrap, genreWrap, avgViewsWrap, followersWrap
       ].forEach(f => form.appendChild(f));
 
-      form.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-slate-200' },
-        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+      form.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-stone-200' },
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50', onClick: () => modal.close() }, 'Cancel'),
         submitBtn
       ));
       const modal = renderModal('Add Influencer Profile + Platform', form);
@@ -586,23 +586,23 @@
       const form = el('div', { class: 'space-y-3' });
       const fields = {};
       const mkField = (label, name, type = 'text', opts = {}) => {
-        const inp = el('input', { type, name, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
+        const inp = el('input', { type, name, class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' });
         fields[name] = inp;
         return el('label', { class: 'block' },
-          el('span', { class: 'text-xs font-medium text-slate-600' }, label + (opts.required ? ' *' : '')),
+          el('span', { class: 'text-xs font-medium text-stone-600' }, label + (opts.required ? ' *' : '')),
           inp
         );
       };
 
-      const platSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' },
+      const platSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' },
         el('option', { value: '' }, '— Select —'),
         ...['Instagram','Youtube','Facebook','Tiktok'].map(p => el('option', { value: p }, p))
       );
       fields.platform = platSel;
 
-      form.appendChild(el('div', { class: 'text-xs px-2 py-1.5 bg-slate-100 rounded text-slate-700' }, `Profile: ${profile.name} (${profile.lead_type} lead)`));
+      form.appendChild(el('div', { class: 'text-xs px-2 py-1.5 bg-stone-100 rounded text-stone-700' }, `Profile: ${profile.name} (${profile.lead_type} lead)`));
       form.appendChild(el('label', { class: 'block' },
-        el('span', { class: 'text-xs font-medium text-slate-600' }, 'Platform *'),
+        el('span', { class: 'text-xs font-medium text-stone-600' }, 'Platform *'),
         platSel
       ));
       form.appendChild(mkField('Username *', 'username'));
@@ -611,7 +611,7 @@
       form.appendChild(mkField('Avg Views (last 10 collabs)', 'avg_views', 'number'));
       form.appendChild(mkField('Followers', 'followers', 'number'));
 
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Add Platform');
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand' }, 'Add Platform');
       submitBtn.addEventListener('click', async () => {
         const payload = {
           profile_id: profile.id,
@@ -639,7 +639,7 @@
       });
 
       form.appendChild(el('div', { class: 'flex justify-end gap-2 pt-2' },
-        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50', onClick: () => modal.close() }, 'Cancel'),
         submitBtn
       ));
       const modal = renderModal('Add Platform', form);
@@ -658,25 +658,25 @@
 
       // Toolbar
       const searchInp = el('input', { type: 'search', placeholder: 'Search by campaign, influencer or @username…', value: L.search,
-        class: 'flex-1 sm:flex-none sm:w-64 px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400 bg-white',
+        class: 'flex-1 sm:flex-none sm:w-64 px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 bg-white',
         oninput: debounce(e => { const v = e.target.value; if (v.length === 1) return; L.search = v; L.page = 1; refresh('campaigns'); }, 500)
       });
 
-      const groupSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-200 rounded-md bg-white',
+      const groupSel = el('select', { class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg bg-white',
         onchange: e => { L.filters.group_status = e.target.value || undefined; L.page = 1; refresh('campaigns'); }
       },
         el('option', { value: '' }, 'All stages'),
         ...(fo?.group_statuses || []).map(g => el('option', { value: g, selected: L.filters.group_status === g }, g))
       );
 
-      const ownerSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-200 rounded-md bg-white',
+      const ownerSel = el('select', { class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg bg-white',
         onchange: e => { L.filters.owner_id = e.target.value || undefined; L.page = 1; refresh('campaigns'); }
       },
         el('option', { value: '' }, 'All owners'),
         ...(fo?.owners || []).map(o => el('option', { value: o.id, selected: L.filters.owner_id === o.id }, o.name || '—'))
       );
 
-      const platSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-200 rounded-md bg-white',
+      const platSel = el('select', { class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg bg-white',
         onchange: e => { L.filters.platform = e.target.value || undefined; L.page = 1; refresh('campaigns'); }
       },
         el('option', { value: '' }, 'All platforms'),
@@ -690,7 +690,7 @@
 
       // Refined data table using CSS grid
       const cols = 'minmax(0,32px) minmax(0,2fr) minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) minmax(0,0.9fr)';
-      const headerRow = el('div', { class: 'hidden md:grid gap-3 items-center px-4 py-2.5 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-wide font-medium border-b border-slate-200', style: `grid-template-columns:${cols};` },
+      const headerRow = el('div', { class: 'hidden md:grid gap-3 items-center px-4 py-2.5 bg-stone-50 text-[10px] text-stone-500 uppercase tracking-wide font-medium border-b border-stone-200', style: `grid-template-columns:${cols};` },
         el('div', {}), el('div', {}, 'Influencer'), el('div', {}, 'Platform'),
         el('div', {}, 'Stage'), el('div', {}, 'Owner'),
         el('div', { class: 'text-right' }, 'Follow-up')
@@ -701,16 +701,16 @@
         const pl = c.platform;
         const stageVariant = { 'Scraping':'slate','Screening':'info','Negotiation':'warning','Integration Planning':'purple','Documents':'indigo','Gone Live':'success','Post Gone Live':'livedark','Dropped':'rose' }[c.group_status] || 'slate';
         const overdue = c.next_followup_at && new Date(c.next_followup_at) < new Date() && !['Dropped','Post Gone Live'].includes(c.group_status);
-        return el('div', { class: 'crm-row grid gap-3 items-center px-4 py-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer', style: `grid-template-columns:${cols};`,
+        return el('div', { class: 'crm-row grid gap-3 items-center px-4 py-3 border-b border-stone-100 hover:bg-stone-50 cursor-pointer', style: `grid-template-columns:${cols};`,
           onClick: () => { window.location.hash = `#campaigns/${c.id}`; } },
           el('div', { class: 'crm-avatar' }, avatar(p?.name || '?', 28)),
           el('div', { class: 'min-w-0' },
-            el('div', { class: 'text-[13px] font-medium text-slate-900 truncate' }, p?.name || '—'),
-            el('div', { class: 'text-[11px] text-slate-400 truncate font-mono' }, `${c.name} · ${p?.lead_type || ''} lead`)
+            el('div', { class: 'text-[13px] font-medium text-stone-900 truncate' }, p?.name || '—'),
+            el('div', { class: 'text-[11px] text-stone-400 truncate font-mono' }, `${c.name} · ${p?.lead_type || ''} lead`)
           ),
           el('div', { class: 'min-w-0' },
-            el('div', { class: 'text-[13px] text-slate-700' }, pl?.platform || '—'),
-            el('div', { class: 'text-[11px] text-slate-400 truncate' }, `@${pl?.username || ''}${pl?.followers ? ' · ' + Number(pl.followers).toLocaleString() : ''}`)
+            el('div', { class: 'text-[13px] text-stone-700' }, pl?.platform || '—'),
+            el('div', { class: 'text-[11px] text-stone-400 truncate' }, `@${pl?.username || ''}${pl?.followers ? ' · ' + Number(pl.followers).toLocaleString() : ''}`)
           ),
           el('div', {}, subtleBadge(c.group_status, stageVariant)),
           (() => {
@@ -718,13 +718,13 @@
             const realOwner = c.owner?.full_name || '—';
             if (poc && poc !== realOwner) {
               return el('div', { class: 'text-[12px] truncate min-w-0', title: `POC pending migration · currently owned by ${realOwner}` },
-                el('span', { class: 'text-slate-700' }, poc),
+                el('span', { class: 'text-stone-700' }, poc),
                 el('span', { class: 'text-[10px] text-amber-600 ml-1' }, '· pending')
               );
             }
-            return el('div', { class: 'text-[12px] text-slate-600 truncate' }, realOwner);
+            return el('div', { class: 'text-[12px] text-stone-600 truncate' }, realOwner);
           })(),
-          el('div', { class: `text-[11px] text-right truncate ${overdue ? 'text-rose-600 font-medium' : 'text-slate-500'}` },
+          el('div', { class: `text-[11px] text-right truncate ${overdue ? 'text-rose-600 font-medium' : 'text-stone-500'}` },
             c.next_followup_at ? fmtDateTime(c.next_followup_at) : '—'
           )
         );
@@ -732,21 +732,21 @@
 
       const tableBody = L.items.length
         ? L.items.map(renderRow)
-        : [el('div', { class: 'px-4 py-16 text-center text-sm text-slate-400' }, 'No campaigns match these filters. Click + New profile to begin.')];
+        : [el('div', { class: 'px-4 py-16 text-center text-sm text-stone-400' }, 'No campaigns match these filters. Click + New profile to begin.')];
 
-      const table = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden' },
+      const table = el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden' },
         headerRow,
         ...tableBody
       );
 
       // Pagination
-      const pag = el('div', { class: 'flex items-center justify-between mt-3 text-[12px] text-slate-500' },
+      const pag = el('div', { class: 'flex items-center justify-between mt-3 text-[12px] text-stone-500' },
         el('span', {}, `Showing ${L.items.length} of ${L.total}`),
         el('div', { class: 'flex gap-1 items-center' },
-          el('button', { class: 'px-2.5 py-1 border border-slate-200 rounded disabled:opacity-40 bg-white',
+          el('button', { class: 'px-2.5 py-1 border border-stone-200 rounded disabled:opacity-40 bg-white',
             disabled: L.page <= 1, onClick: () => { L.page--; refresh('campaigns'); } }, 'Prev'),
           el('span', { class: 'px-3 py-1' }, `Page ${L.page} / ${totalPages}`),
-          el('button', { class: 'px-2.5 py-1 border border-slate-200 rounded disabled:opacity-40 bg-white',
+          el('button', { class: 'px-2.5 py-1 border border-stone-200 rounded disabled:opacity-40 bg-white',
             disabled: L.page >= totalPages, onClick: () => { L.page++; refresh('campaigns'); } }, 'Next')
         )
       );
@@ -757,9 +757,9 @@
           'Active campaigns',
           `Tracking ${L.total} campaigns across all platforms`,
           [
-            el('button', { class: 'px-3 py-2 text-sm bg-white border border-slate-200 rounded-md hover:bg-slate-50 text-slate-700', onClick: exportCampaignsCSV }, '⬇ Export'),
-            state.me?.role === 'admin' ? el('button', { class: 'px-3 py-2 text-sm bg-white border border-slate-200 rounded-md hover:bg-slate-50 text-slate-700', onClick: openImportCSVModal }, '⬆ Import') : null,
-            el('button', { class: 'px-3 py-2 text-sm rounded-md btn-brand', onClick: openAddProfileModal }, '+ New profile')
+            el('button', { class: 'px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg hover:bg-stone-50 text-stone-700', onClick: exportCampaignsCSV }, '⬇ Export'),
+            state.me?.role === 'admin' ? el('button', { class: 'px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg hover:bg-stone-50 text-stone-700', onClick: openImportCSVModal }, '⬆ Import') : null,
+            el('button', { class: 'px-3 py-2 text-sm rounded-lg btn-brand', onClick: openAddProfileModal }, '+ New profile')
           ]
         ),
         strip,
@@ -778,16 +778,16 @@
       const totalPages = Math.max(1, Math.ceil(L.total / PAGE_SIZE));
 
       const searchInp = el('input', { type: 'search', placeholder: 'Search name, email, phone…', value: L.search,
-        class: 'flex-1 sm:flex-none sm:w-64 px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400 bg-white',
+        class: 'flex-1 sm:flex-none sm:w-64 px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 bg-white',
         oninput: debounce(e => { const v = e.target.value; if (v.length === 1) return; L.search = v; L.page = 1; refresh('profiles'); }, 500)
       });
-      const ltSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-200 rounded-md bg-white',
+      const ltSel = el('select', { class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg bg-white',
         onchange: e => { L.filters.lead_type = e.target.value || undefined; L.page = 1; refresh('profiles'); }
       },
         el('option', { value: '' }, 'All lead types'),
         ...(fo?.lead_types || []).map(t => el('option', { value: t, selected: L.filters.lead_type === t }, t))
       );
-      const ownerSel = el('select', { class: 'px-3 py-2 text-sm border border-slate-200 rounded-md bg-white',
+      const ownerSel = el('select', { class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg bg-white',
         onchange: e => { L.filters.created_by = e.target.value || undefined; L.page = 1; refresh('profiles'); }
       },
         el('option', { value: '' }, 'All owners'),
@@ -795,51 +795,51 @@
       );
 
       const cols = 'minmax(0,32px) minmax(0,2fr) minmax(0,0.8fr) minmax(0,1.4fr) minmax(0,1.6fr) minmax(0,1fr) minmax(0,80px)';
-      const headerRow = el('div', { class: 'hidden md:grid gap-3 items-center px-4 py-2.5 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-wide font-medium border-b border-slate-200', style: `grid-template-columns:${cols};` },
+      const headerRow = el('div', { class: 'hidden md:grid gap-3 items-center px-4 py-2.5 bg-stone-50 text-[10px] text-stone-500 uppercase tracking-wide font-medium border-b border-stone-200', style: `grid-template-columns:${cols};` },
         el('div', {}), el('div', {}, 'Name'), el('div', {}, 'Lead'),
         el('div', {}, 'Contact'), el('div', {}, 'Platforms'),
         el('div', {}, 'Owner'),
         el('div', { class: 'text-right' }, '')
       );
 
-      const rows = L.items.length ? L.items.map(p => el('div', { class: 'crm-row grid gap-3 items-center px-4 py-3 border-b border-slate-100 hover:bg-slate-50', style: `grid-template-columns:${cols};` },
+      const rows = L.items.length ? L.items.map(p => el('div', { class: 'crm-row grid gap-3 items-center px-4 py-3 border-b border-stone-100 hover:bg-stone-50', style: `grid-template-columns:${cols};` },
         el('div', { class: 'crm-avatar' }, avatar(p.name, 28)),
         el('div', { class: 'min-w-0 cursor-pointer', onClick: () => { window.location.hash = `#profiles/${p.id}`; } },
-          el('div', { class: 'text-[13px] font-medium text-slate-900 truncate' }, p.name),
-          el('div', { class: 'text-[11px] text-slate-400 truncate' }, p.region || '—')
+          el('div', { class: 'text-[13px] font-medium text-stone-900 truncate' }, p.name),
+          el('div', { class: 'text-[11px] text-stone-400 truncate' }, p.region || '—')
         ),
         el('div', {}, subtleBadge(p.lead_type, 'slate')),
-        el('div', { class: 'text-[12px] text-slate-600 min-w-0 truncate' },
+        el('div', { class: 'text-[12px] text-stone-600 min-w-0 truncate' },
           p.email || p.phone || '—'
         ),
-        el('div', { class: 'text-[12px] text-slate-600 min-w-0 truncate' },
+        el('div', { class: 'text-[12px] text-stone-600 min-w-0 truncate' },
           (p.platforms || []).length
             ? (p.platforms || []).map(pl => `${pl.platform}·@${pl.username}`).join(', ')
             : el('span', { class: 'text-[11px] text-amber-700' }, 'no platforms')
         ),
-        el('div', { class: 'text-[12px] text-slate-500 truncate' }, p.owner?.full_name || '—'),
+        el('div', { class: 'text-[12px] text-stone-500 truncate' }, p.owner?.full_name || '—'),
         el('div', { class: 'text-right' },
           el('button', { class: 'text-[11px] text-brand hover:underline',
             onClick: () => openAddPlatformModal(p) }, '+ platform')
         ),
-      )) : [el('div', { class: 'px-4 py-16 text-center text-sm text-slate-400' }, 'No profiles yet. Click + New profile to begin.')];
+      )) : [el('div', { class: 'px-4 py-16 text-center text-sm text-stone-400' }, 'No profiles yet. Click + New profile to begin.')];
 
-      const table = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden' }, headerRow, ...rows);
+      const table = el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden' }, headerRow, ...rows);
 
-      const pag = el('div', { class: 'flex items-center justify-between mt-3 text-[12px] text-slate-500' },
+      const pag = el('div', { class: 'flex items-center justify-between mt-3 text-[12px] text-stone-500' },
         el('span', {}, `Showing ${L.items.length} of ${L.total}`),
         el('div', { class: 'flex gap-1 items-center' },
-          el('button', { class: 'px-2.5 py-1 border border-slate-200 rounded disabled:opacity-40 bg-white',
+          el('button', { class: 'px-2.5 py-1 border border-stone-200 rounded disabled:opacity-40 bg-white',
             disabled: L.page <= 1, onClick: () => { L.page--; refresh('profiles'); } }, 'Prev'),
           el('span', { class: 'px-3 py-1' }, `Page ${L.page} / ${totalPages}`),
-          el('button', { class: 'px-2.5 py-1 border border-slate-200 rounded disabled:opacity-40 bg-white',
+          el('button', { class: 'px-2.5 py-1 border border-stone-200 rounded disabled:opacity-40 bg-white',
             disabled: L.page >= totalPages, onClick: () => { L.page++; refresh('profiles'); } }, 'Next')
         )
       );
 
       return el('div', {},
         pageHeader('Influencer marketing', 'Profiles', `${L.total} influencers in your directory`,
-          el('button', { class: 'px-3 py-2 text-sm rounded-md btn-brand', onClick: openAddProfileModal }, '+ New profile')
+          el('button', { class: 'px-3 py-2 text-sm rounded-lg btn-brand', onClick: openAddProfileModal }, '+ New profile')
         ),
         el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' }, searchInp, ltSel, ownerSel),
         table, pag
@@ -853,31 +853,31 @@
       const fields = {};
       const wrap = el('div', { class: 'space-y-3' });
 
-      fields.name = el('input', { type: 'text', value: p.name || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
-      fields.email = el('input', { type: 'email', value: p.email || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
-      fields.phone = el('input', { type: 'tel', value: p.phone || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
-      fields.region = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' },
+      fields.name = el('input', { type: 'text', value: p.name || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' });
+      fields.email = el('input', { type: 'email', value: p.email || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' });
+      fields.phone = el('input', { type: 'tel', value: p.phone || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' });
+      fields.region = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' },
         el('option', { value: '' }, '— Select country —'),
         ...COUNTRIES.map(c => el('option', { value: c, selected: p.region === c }, c))
       );
       const currentLangs = new Set(p.languages || []);
       const langBoxes = LANGUAGES.map(l => {
-        const cb = el('input', { type: 'checkbox', value: l, checked: currentLangs.has(l), class: 'rounded border-slate-300 text-blue-600 focus:ring-blue-500' });
-        return el('label', { class: 'inline-flex items-center gap-1 text-xs px-2 py-1 border border-slate-200 rounded bg-slate-50 cursor-pointer hover:bg-slate-100' }, cb, l);
+        const cb = el('input', { type: 'checkbox', value: l, checked: currentLangs.has(l), class: 'rounded border-stone-300 text-blue-600 focus:ring-blue-500' });
+        return el('label', { class: 'inline-flex items-center gap-1 text-xs px-2 py-1 border border-stone-200 rounded bg-stone-50 cursor-pointer hover:bg-stone-100' }, cb, l);
       });
       fields.languages = langBoxes;
-      fields.lead_type = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' },
+      fields.lead_type = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' },
         ...['Phone','Email','DM'].map(t => el('option', { value: t, selected: p.lead_type === t }, t))
       );
-      const mk = (label, inp) => el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, label), inp);
+      const mk = (label, inp) => el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-stone-600' }, label), inp);
       wrap.appendChild(mk('Name *', fields.name));
       wrap.appendChild(mk('Email', fields.email));
       wrap.appendChild(mk('Phone', fields.phone));
       wrap.appendChild(mk('Region', fields.region));
-      wrap.appendChild(el('div', {}, el('span', { class: 'text-xs font-medium text-slate-600 block mb-1' }, 'Languages'), el('div', { class: 'flex flex-wrap gap-1.5' }, ...langBoxes)));
+      wrap.appendChild(el('div', {}, el('span', { class: 'text-xs font-medium text-stone-600 block mb-1' }, 'Languages'), el('div', { class: 'flex flex-wrap gap-1.5' }, ...langBoxes)));
       wrap.appendChild(mk('Lead Type', fields.lead_type));
 
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Save changes');
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand' }, 'Save changes');
       submitBtn.addEventListener('click', async () => {
         const checkedLangs = fields.languages.filter(cb => cb.querySelector('input').checked).map(cb => cb.querySelector('input').value);
         const payload = {
@@ -895,8 +895,8 @@
         if (onSaved) await onSaved();
       });
 
-      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-slate-200' },
-        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-stone-200' },
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50', onClick: () => modal.close() }, 'Cancel'),
         submitBtn
       ));
       const modal = renderModal('Edit Profile', wrap);
@@ -905,20 +905,20 @@
     function openEditPlatformModal(pl, onSaved) {
       const fields = {};
       const wrap = el('div', { class: 'space-y-3' });
-      fields.username  = el('input', { type: 'text', value: pl.username || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
-      fields.link      = el('input', { type: 'url', value: pl.link || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
-      fields.genre     = el('input', { type: 'text', value: pl.genre || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
-      fields.avg_views = el('input', { type: 'number', value: pl.avg_views || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
-      fields.followers = el('input', { type: 'number', value: pl.followers || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' });
-      const mk = (label, inp) => el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, label), inp);
-      wrap.appendChild(el('div', { class: 'text-xs px-2 py-1.5 bg-slate-100 rounded text-slate-700' }, `${pl.platform} platform`));
+      fields.username  = el('input', { type: 'text', value: pl.username || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' });
+      fields.link      = el('input', { type: 'url', value: pl.link || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' });
+      fields.genre     = el('input', { type: 'text', value: pl.genre || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' });
+      fields.avg_views = el('input', { type: 'number', value: pl.avg_views || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' });
+      fields.followers = el('input', { type: 'number', value: pl.followers || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' });
+      const mk = (label, inp) => el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-stone-600' }, label), inp);
+      wrap.appendChild(el('div', { class: 'text-xs px-2 py-1.5 bg-stone-100 rounded text-stone-700' }, `${pl.platform} platform`));
       wrap.appendChild(mk('Username *', fields.username));
       wrap.appendChild(mk('Profile Link', fields.link));
       wrap.appendChild(mk('Genre', fields.genre));
       wrap.appendChild(mk('Avg Views (last 10 collabs)', fields.avg_views));
       wrap.appendChild(mk('Followers', fields.followers));
 
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Save changes');
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand' }, 'Save changes');
       submitBtn.addEventListener('click', async () => {
         const payload = {
           username: fields.username.value.trim(), link: fields.link.value.trim() || null,
@@ -936,8 +936,8 @@
         if (onSaved) await onSaved();
       });
 
-      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-slate-200' },
-        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-stone-200' },
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50', onClick: () => modal.close() }, 'Cancel'),
         submitBtn
       ));
       const modal = renderModal(`Edit ${pl.platform} platform`, wrap);
@@ -1033,35 +1033,35 @@
       const week    = items.filter(c => { const d = new Date(c.next_followup_at); return d > endOfDay && d <= endOfWeek; });
       const later   = items.filter(c => new Date(c.next_followup_at) > endOfWeek);
 
-      const kpi = (label, val, color) => el('div', { class: `bg-white border border-slate-200 rounded-lg p-4` },
-        el('div', { class: 'text-xs text-slate-500 font-medium uppercase tracking-wide' }, label),
+      const kpi = (label, val, color) => el('div', { class: `bg-white border border-stone-200 rounded-xl p-4` },
+        el('div', { class: 'text-xs text-stone-500 font-medium uppercase tracking-wide' }, label),
         el('div', { class: `text-2xl font-bold mt-1 ${color}` }, String(val))
       );
 
       const scopeBtn = (k, label) => el('button', {
-        class: `px-3 py-1.5 text-sm rounded-md border ${followupsCache.scope === k ? 'btn-brand border-transparent' : 'bg-white border-slate-300 hover:bg-slate-50'}`,
+        class: `px-3 py-1.5 text-sm rounded-lg border ${followupsCache.scope === k ? 'btn-brand border-transparent' : 'bg-white border-stone-300 hover:bg-stone-50'}`,
         onClick: async () => { followupsCache.scope = k; await fetchFollowups(); render(); }
       }, label);
 
-      const section = (title, list, urgent) => list.length ? el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
-        el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between' },
+      const section = (title, list, urgent) => list.length ? el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden mb-4' },
+        el('div', { class: 'px-4 py-2 border-b border-stone-200 bg-stone-50 flex items-center justify-between' },
           el('div', { class: 'text-sm font-semibold' }, title),
-          el('div', { class: 'text-xs text-slate-500' }, `${list.length} items`)
+          el('div', { class: 'text-xs text-stone-500' }, `${list.length} items`)
         ),
-        el('div', { class: 'divide-y divide-slate-100' },
-          ...list.map(c => el('div', { class: 'px-4 py-2.5 hover:bg-slate-50 cursor-pointer grid grid-cols-12 gap-2 items-center',
+        el('div', { class: 'divide-y divide-stone-100' },
+          ...list.map(c => el('div', { class: 'px-4 py-2.5 hover:bg-stone-50 cursor-pointer grid grid-cols-12 gap-2 items-center',
             onClick: () => { window.location.hash = `#campaigns/${c.id}`; } },
             el('div', { class: 'col-span-12 md:col-span-3' },
               el('div', { class: 'text-sm font-medium truncate' }, c.name),
-              el('div', { class: 'text-xs text-slate-500 truncate' }, `${c.platform?.platform || ''} · @${c.platform?.username || ''}`)
+              el('div', { class: 'text-xs text-stone-500 truncate' }, `${c.platform?.platform || ''} · @${c.platform?.username || ''}`)
             ),
-            el('div', { class: 'col-span-6 md:col-span-3 text-xs text-slate-600 truncate' },
+            el('div', { class: 'col-span-6 md:col-span-3 text-xs text-stone-600 truncate' },
               c.platform?.profile?.name || '—'
             ),
             el('div', { class: 'col-span-6 md:col-span-2' },
               el('span', { class: `badge ${groupStatusColor(c.group_status)}` }, c.group_status)
             ),
-            el('div', { class: `col-span-6 md:col-span-2 text-xs ${urgent ? 'text-rose-600 font-semibold' : 'text-slate-600'}` },
+            el('div', { class: `col-span-6 md:col-span-2 text-xs ${urgent ? 'text-rose-600 font-semibold' : 'text-stone-600'}` },
               fmtDateTime(c.next_followup_at)
             ),
             el('div', { class: 'col-span-6 md:col-span-2 text-xs text-right truncate' },
@@ -1069,9 +1069,9 @@
                 const poc = c.platform?.imported_poc;
                 const realOwner = c.owner?.full_name || '—';
                 if (poc && poc !== realOwner) {
-                  return el('span', { class: 'text-slate-700' }, poc, el('span', { class: 'text-[10px] text-amber-600 ml-1' }, '· pending'));
+                  return el('span', { class: 'text-stone-700' }, poc, el('span', { class: 'text-[10px] text-amber-600 ml-1' }, '· pending'));
                 }
-                return el('span', { class: 'text-slate-500' }, realOwner);
+                return el('span', { class: 'text-stone-500' }, realOwner);
               })()
             )
           ))
@@ -1084,7 +1084,7 @@
           kpi('Overdue', overdue.length, 'text-rose-600'),
           kpi('Due today', today.length, 'text-amber-600'),
           kpi('Due this week', week.length, 'text-brand'),
-          kpi('Later', later.length, 'text-slate-700'),
+          kpi('Later', later.length, 'text-stone-700'),
         ),
         el('div', { class: 'flex gap-2 mb-4' },
           scopeBtn('mine', 'My follow-ups'),
@@ -1094,7 +1094,7 @@
         section('Due today', today, true),
         section('Due this week', week, false),
         section('Later', later, false),
-        !items.length ? el('div', { class: 'bg-white border border-dashed border-slate-300 rounded-lg p-10 text-center text-sm text-slate-500' }, 'No follow-ups scheduled') : null
+        !items.length ? el('div', { class: 'bg-white border border-dashed border-stone-300 rounded-xl p-10 text-center text-sm text-stone-500' }, 'No follow-ups scheduled') : null
       );
     }
 
@@ -1109,16 +1109,16 @@
     }
 
     function viewDashboard() {
-      if (!dashCache) return el('div', { class: 'text-center text-sm text-slate-500 py-10' }, 'Loading…');
+      if (!dashCache) return el('div', { class: 'text-center text-sm text-stone-500 py-10' }, 'Loading…');
       const d = dashCache;
 
-      const kpi = (label, val, color) => el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
-        el('div', { class: 'text-xs text-slate-500 font-medium uppercase tracking-wide' }, label),
+      const kpi = (label, val, color) => el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4' },
+        el('div', { class: 'text-xs text-stone-500 font-medium uppercase tracking-wide' }, label),
         el('div', { class: `text-2xl font-bold mt-1 ${color}` }, val)
       );
 
       const kpis = el('div', { class: 'grid grid-cols-2 md:grid-cols-6 gap-3 mb-5' },
-        kpiTile('Open',          d.kpis?.open_campaigns ?? 0,                'text-slate-900'),
+        kpiTile('Open',          d.kpis?.open_campaigns ?? 0,                'text-stone-900'),
         kpiTile('Gone Live',     d.kpis?.gone_live ?? 0,                     'text-emerald-600'),
         kpiTile('Post Live',     d.kpis?.post_gone_live ?? 0,                'text-emerald-700'),
         kpiTile('Dropped',       d.kpis?.dropped ?? 0,                       'text-rose-600'),
@@ -1131,22 +1131,22 @@
       const barCanvas = el('canvas', { id: 'dash-activity', height: 220 });
 
       const charts = el('div', { class: 'grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5' },
-        el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
+        el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4' },
           el('h3', { class: 'text-sm font-semibold mb-3' }, 'Pipeline distribution'),
           pieCanvas
         ),
-        el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
+        el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4' },
           el('h3', { class: 'text-sm font-semibold mb-3' }, 'Activity — last 30 days'),
           barCanvas
         )
       );
 
       // Leaderboard
-      const lb = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden' },
-        el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 text-sm font-semibold' }, 'Top contributors — this month'),
+      const lb = el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden' },
+        el('div', { class: 'px-4 py-2 border-b border-stone-200 bg-stone-50 text-sm font-semibold' }, 'Top contributors — this month'),
         el('div', { class: 'overflow-x-auto' },
           el('table', { class: 'w-full text-sm' },
-            el('thead', { class: 'bg-slate-50 text-[11px] uppercase text-slate-500' },
+            el('thead', { class: 'bg-stone-50 text-[11px] uppercase text-stone-500' },
               el('tr', {},
                 el('th', { class: 'px-3 py-2 text-left' }, 'Name'),
                 el('th', { class: 'px-3 py-2 text-right' }, 'Campaigns touched'),
@@ -1154,7 +1154,7 @@
               )
             ),
             el('tbody', {},
-              ...(d.leaderboard || []).map(l => el('tr', { class: 'border-b border-slate-100' },
+              ...(d.leaderboard || []).map(l => el('tr', { class: 'border-b border-stone-100' },
                 el('td', { class: 'px-3 py-2' }, l.name || '—'),
                 el('td', { class: 'px-3 py-2 text-right' }, String(l.touched || 0)),
                 el('td', { class: 'px-3 py-2 text-right' }, String(l.activities || 0))
@@ -1201,12 +1201,14 @@
       }
       const rangeStart = reportsState.from;
       const rangeEnd = reportsState.to + 'T23:59:59';
-      const [{ data: d, error: e1 }, { data: tg, error: e2 }, { data: rawScouts, error: e3 }, { data: rawFollowups, error: e4 }, { data: admins, error: e5 }] = await Promise.all([
+      const [{ data: d, error: e1 }, { data: tg, error: e2 }, { data: rawScouts, error: e3 }, { data: rawFollowups, error: e4 }, { data: admins, error: e5 }, { data: rawGoneLive, error: e6 }] = await Promise.all([
         supabase.rpc('reports_data', { d_from: reportsState.from, d_to: reportsState.to }),
         supabase.rpc('reachout_target_report', { d_from: reportsState.from, d_to: reportsState.to }),
         supabase.from('platforms').select('created_at').gte('created_at', rangeStart).lte('created_at', rangeEnd),
         supabase.from('campaign_activities').select('created_at').gte('created_at', rangeStart).lte('created_at', rangeEnd),
         supabase.from('team_members').select('user_id').eq('role', 'admin'),
+        supabase.from('campaigns').select('gone_live_date, owner:team_members!campaigns_owner_id_fkey ( full_name )')
+          .not('gone_live_date', 'is', null).gte('gone_live_date', reportsState.from).lte('gone_live_date', reportsState.to),
       ]);
       if (e1) { toast(e1.message, 'error'); return; }
       if (e2) { toast(e2.message, 'error'); }
@@ -1224,25 +1226,50 @@
       } else {
         reportsState.hourly = d?.hourly || [];
       }
+      // Gone Live count, day-wise, stacked by owner
+      if (!e6) {
+        const byDayOwner = {};
+        const owners = new Set();
+        (rawGoneLive || []).forEach(r => {
+          const day = r.gone_live_date;
+          const owner = r.owner?.full_name || 'Unassigned';
+          owners.add(owner);
+          byDayOwner[day] = byDayOwner[day] || {};
+          byDayOwner[day][owner] = (byDayOwner[day][owner] || 0) + 1;
+        });
+        const days = Object.keys(byDayOwner).sort();
+        reportsState.goneLive = { days, owners: Array.from(owners).sort(), byDayOwner };
+      } else {
+        reportsState.goneLive = { days: [], owners: [], byDayOwner: {} };
+      }
     }
 
     function viewReports() {
-      if (!reportsState.data) return el('div', { class: 'text-center text-sm text-slate-500 py-10' }, 'Loading…');
+      if (!reportsState.data) return el('div', { class: 'text-center text-sm text-stone-500 py-10' }, 'Loading…');
       const d = reportsState.data;
 
-      const dateBar = el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4 mb-4 flex flex-wrap items-center gap-3' },
-        el('label', { class: 'text-xs text-slate-600' }, 'From ', el('input', { type: 'date', value: reportsState.from, class: 'ml-1 px-2 py-1 border border-slate-300 rounded',
+      const dateBar = el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4 mb-4 flex flex-wrap items-center gap-3' },
+        el('label', { class: 'text-xs text-stone-600' }, 'From ', el('input', { type: 'date', value: reportsState.from, class: 'ml-1 px-2 py-1 border border-stone-300 rounded',
           onchange: e => { reportsState.from = e.target.value; } })),
-        el('label', { class: 'text-xs text-slate-600' }, 'To ', el('input', { type: 'date', value: reportsState.to, class: 'ml-1 px-2 py-1 border border-slate-300 rounded',
+        el('label', { class: 'text-xs text-stone-600' }, 'To ', el('input', { type: 'date', value: reportsState.to, class: 'ml-1 px-2 py-1 border border-stone-300 rounded',
           onchange: e => { reportsState.to = e.target.value; } })),
-        el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand', onClick: async () => { await fetchReports(); render(); } }, 'Apply')
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand', onClick: async () => { await fetchReports(); render(); } }, 'Apply')
       );
 
       // Hourly: new scouts vs follow-ups
       const hourlyCanvas = el('canvas', { id: 'rep-hourly' });
-      const hourlyCard = el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4 mb-4' },
+      const hourlyCard = el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4 mb-4' },
         el('h3', { class: 'text-sm font-semibold mb-3' }, 'Hourly — new scouts vs follow-ups'),
         el('div', { style: 'height:180px;position:relative;' }, hourlyCanvas)
+      );
+
+      // Gone Live: day-wise, stacked by owner
+      const goneLiveCanvas = el('canvas', { id: 'rep-gonelive' });
+      const goneLiveCard = el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4 mb-4' },
+        el('h3', { class: 'text-sm font-semibold mb-3' }, 'Gone Live — day-wise by owner'),
+        (reportsState.goneLive?.days || []).length
+          ? el('div', { style: 'height:260px;position:relative;' }, goneLiveCanvas)
+          : el('div', { class: 'text-sm text-stone-400 text-center py-10' }, 'No campaigns went Gone Live in this range')
       );
 
       // Agent daily reachout table
@@ -1251,11 +1278,11 @@
         fu_count: acc.fu_count + (a.fu_count || 0),
         unique_campaigns: acc.unique_campaigns + (a.unique_campaigns || 0)
       }), { new_count: 0, fu_count: 0, unique_campaigns: 0 });
-      const agentDaily = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
-        el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 text-sm font-semibold' }, 'Agent reachout summary'),
+      const agentDaily = el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden mb-4' },
+        el('div', { class: 'px-4 py-2 border-b border-stone-200 bg-stone-50 text-sm font-semibold' }, 'Agent reachout summary'),
         el('div', { class: 'overflow-x-auto' },
           el('table', { class: 'w-full text-sm' },
-            el('thead', { class: 'bg-slate-50 text-[11px] uppercase text-slate-500' },
+            el('thead', { class: 'bg-stone-50 text-[11px] uppercase text-stone-500' },
               el('tr', {},
                 el('th', { class: 'px-3 py-2 text-left' }, 'Agent'),
                 el('th', { class: 'px-3 py-2 text-right' }, 'New scouts'),
@@ -1264,13 +1291,13 @@
               )
             ),
             el('tbody', {},
-              ...(d.agent_daily || []).map(a => el('tr', { class: 'border-b border-slate-100' },
+              ...(d.agent_daily || []).map(a => el('tr', { class: 'border-b border-stone-100' },
                 el('td', { class: 'px-3 py-2' }, a.full_name || '—'),
                 el('td', { class: 'px-3 py-2 text-right' }, String(a.new_count || 0)),
                 el('td', { class: 'px-3 py-2 text-right' }, String(a.fu_count || 0)),
                 el('td', { class: 'px-3 py-2 text-right' }, String(a.unique_campaigns || 0))
               )),
-              el('tr', { class: 'bg-slate-50 font-semibold border-t-2 border-slate-200' },
+              el('tr', { class: 'bg-stone-50 font-semibold border-t-2 border-stone-200' },
                 el('td', { class: 'px-3 py-2' }, 'Total'),
                 el('td', { class: 'px-3 py-2 text-right' }, String(agentDailyTotal.new_count)),
                 el('td', { class: 'px-3 py-2 text-right' }, String(agentDailyTotal.fu_count)),
@@ -1288,30 +1315,30 @@
       const rowTotal = a => groups.reduce((s, g) => s + (matrix.find(m => m.full_name === a && m.group_status === g)?.cnt || 0), 0);
       const colTotal = g => agents.reduce((s, a) => s + (matrix.find(m => m.full_name === a && m.group_status === g)?.cnt || 0), 0);
       const grandTotal = agents.reduce((s, a) => s + rowTotal(a), 0);
-      const matrixCard = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
-        el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 text-sm font-semibold' }, 'Pipeline matrix (owner × stage)'),
+      const matrixCard = el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden mb-4' },
+        el('div', { class: 'px-4 py-2 border-b border-stone-200 bg-stone-50 text-sm font-semibold' }, 'Pipeline matrix (owner × stage)'),
         el('div', { class: 'overflow-x-auto' },
           el('table', { class: 'w-full text-xs' },
             el('thead', {},
-              el('tr', { class: 'bg-slate-50 text-slate-500 uppercase text-[10px]' },
+              el('tr', { class: 'bg-stone-50 text-stone-500 uppercase text-[10px]' },
                 el('th', { class: 'px-2 py-1.5 text-left' }, 'Agent'),
                 ...groups.map(g => el('th', { class: 'px-2 py-1.5 text-right' }, g)),
-                el('th', { class: 'px-2 py-1.5 text-right bg-slate-100' }, 'Total')
+                el('th', { class: 'px-2 py-1.5 text-right bg-stone-100' }, 'Total')
               )
             ),
             el('tbody', {},
-              ...agents.map(a => el('tr', { class: 'border-b border-slate-100' },
+              ...agents.map(a => el('tr', { class: 'border-b border-stone-100' },
                 el('td', { class: 'px-2 py-1.5 font-medium' }, a),
                 ...groups.map(g => {
                   const cell = matrix.find(m => m.full_name === a && m.group_status === g);
                   return el('td', { class: 'px-2 py-1.5 text-right' }, cell ? String(cell.cnt) : '—');
                 }),
-                el('td', { class: 'px-2 py-1.5 text-right font-semibold bg-slate-50' }, String(rowTotal(a)))
+                el('td', { class: 'px-2 py-1.5 text-right font-semibold bg-stone-50' }, String(rowTotal(a)))
               )),
-              el('tr', { class: 'bg-slate-50 font-semibold border-t-2 border-slate-200' },
+              el('tr', { class: 'bg-stone-50 font-semibold border-t-2 border-stone-200' },
                 el('td', { class: 'px-2 py-1.5' }, 'Total'),
                 ...groups.map(g => el('td', { class: 'px-2 py-1.5 text-right' }, String(colTotal(g)))),
-                el('td', { class: 'px-2 py-1.5 text-right bg-slate-100' }, String(grandTotal))
+                el('td', { class: 'px-2 py-1.5 text-right bg-stone-100' }, String(grandTotal))
               )
             )
           )
@@ -1320,11 +1347,11 @@
 
 
       // L2E conversion
-      const l2eCard = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
-        el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 text-sm font-semibold' }, 'Lead → Live conversion'),
+      const l2eCard = el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden mb-4' },
+        el('div', { class: 'px-4 py-2 border-b border-stone-200 bg-stone-50 text-sm font-semibold' }, 'Lead → Live conversion'),
         el('div', { class: 'overflow-x-auto' },
           el('table', { class: 'w-full text-sm' },
-            el('thead', { class: 'bg-slate-50 text-[11px] uppercase text-slate-500' },
+            el('thead', { class: 'bg-stone-50 text-[11px] uppercase text-stone-500' },
               el('tr', {},
                 el('th', { class: 'px-3 py-2 text-left' }, 'Agent'),
                 el('th', { class: 'px-3 py-2 text-right' }, 'Leads (platforms)'),
@@ -1335,7 +1362,7 @@
             el('tbody', {},
               ...(d.l2e || []).map(a => {
                 const rate = a.leads ? Math.round(100 * a.conversions / a.leads) : 0;
-                return el('tr', { class: 'border-b border-slate-100' },
+                return el('tr', { class: 'border-b border-stone-100' },
                   el('td', { class: 'px-3 py-2' }, a.full_name || '—'),
                   el('td', { class: 'px-3 py-2 text-right' }, String(a.leads || 0)),
                   el('td', { class: 'px-3 py-2 text-right' }, String(a.conversions || 0)),
@@ -1348,18 +1375,18 @@
       );
 
       // Drop reasons
-      const dropCard = el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
-        el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 text-sm font-semibold' }, 'Drop reasons'),
+      const dropCard = el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden mb-4' },
+        el('div', { class: 'px-4 py-2 border-b border-stone-200 bg-stone-50 text-sm font-semibold' }, 'Drop reasons'),
         el('div', { class: 'overflow-x-auto' },
           el('table', { class: 'w-full text-sm' },
-            el('thead', { class: 'bg-slate-50 text-[11px] uppercase text-slate-500' },
+            el('thead', { class: 'bg-stone-50 text-[11px] uppercase text-stone-500' },
               el('tr', {},
                 el('th', { class: 'px-3 py-2 text-left' }, 'Sub-status'),
                 el('th', { class: 'px-3 py-2 text-right' }, 'Count'),
               )
             ),
             el('tbody', {},
-              ...(d.drop_reasons || []).map(r => el('tr', { class: 'border-b border-slate-100' },
+              ...(d.drop_reasons || []).map(r => el('tr', { class: 'border-b border-stone-100' },
                 el('td', { class: 'px-3 py-2' }, r.sub_status),
                 el('td', { class: 'px-3 py-2 text-right' }, String(r.cnt || 0))
               ))
@@ -1382,6 +1409,22 @@
             options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } } }
           });
         }
+        if (window.Chart && document.getElementById('rep-gonelive')) {
+          const gl = reportsState.goneLive || { days: [], owners: [], byDayOwner: {} };
+          const ownerColors = ['#4060f0','#f0d000','#f08000','#40d060','#40c0f0','#f04040','#a855f7','#6366f1','#059669','#e879f9'];
+          new Chart(document.getElementById('rep-gonelive'), {
+            type: 'bar',
+            data: {
+              labels: gl.days.map(d => fmtDate(d)),
+              datasets: gl.owners.map((owner, i) => ({
+                label: owner,
+                data: gl.days.map(d => (gl.byDayOwner[d] || {})[owner] || 0),
+                backgroundColor: ownerColors[i % ownerColors.length]
+              }))
+            },
+            options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, ticks: { precision: 0 } } }, plugins: { legend: { position: 'bottom' } } }
+          });
+        }
       }, 0);
 
       // Reach-out targets — target vs achieved by day & owner (Sunday excluded)
@@ -1390,7 +1433,7 @@
         const matrixByUserDay = {};
         (tg.matrix || []).forEach(m => { matrixByUserDay[`${m.user_id}|${m.d}`] = m; });
         const cellColor = (achieved, target) => {
-          if (!target) return 'bg-slate-50 text-slate-400';
+          if (!target) return 'bg-stone-50 text-stone-400';
           const pct = (achieved / target) * 100;
           if (pct >= 100) return 'bg-emerald-50 text-emerald-800';
           if (pct >= 50)  return 'bg-amber-50 text-amber-800';
@@ -1401,38 +1444,38 @@
           return `${dt.getDate()}/${dt.getMonth()+1}`;
         };
         const weekday = (d) => ['Su','Mo','Tu','We','Th','Fr','Sa'][new Date(d).getDay()];
-        return el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
-          el('div', { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between' },
+        return el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden mb-4' },
+          el('div', { class: 'px-4 py-2 border-b border-stone-200 bg-stone-50 flex items-center justify-between' },
             el('div', { class: 'text-sm font-semibold' }, 'Reach-out targets · Target vs Achieved'),
-            el('div', { class: 'text-[11px] text-slate-500' }, 'Sundays excluded · New scouts only')
+            el('div', { class: 'text-[11px] text-stone-500' }, 'Sundays excluded · New scouts only')
           ),
           el('div', { class: 'overflow-x-auto' },
             el('table', { class: 'w-full text-xs' },
               el('thead', {},
-                el('tr', { class: 'bg-slate-50 text-slate-500 uppercase text-[10px]' },
-                  el('th', { class: 'px-2 py-1.5 text-left sticky left-0 bg-slate-50' }, 'Agent'),
+                el('tr', { class: 'bg-stone-50 text-stone-500 uppercase text-[10px]' },
+                  el('th', { class: 'px-2 py-1.5 text-left sticky left-0 bg-stone-50' }, 'Agent'),
                   el('th', { class: 'px-2 py-1.5 text-right' }, 'Target/day'),
                   ...(tg.days || []).map(d => el('th', { class: 'px-1.5 py-1.5 text-center' },
                     el('div', { class: 'text-[10px]' }, weekday(d)),
                     el('div', { class: 'font-normal' }, dayLabel(d))
                   )),
-                  el('th', { class: 'px-2 py-1.5 text-right bg-slate-100' }, 'Total')
+                  el('th', { class: 'px-2 py-1.5 text-right bg-stone-100' }, 'Total')
                 )
               ),
               el('tbody', {},
                 ...((tg.summary || []).map(u => {
                   const totalPct = u.total_target ? Math.round(100 * u.total_achieved / u.total_target) : 0;
-                  const totalColor = !u.total_target ? 'text-slate-400' : totalPct >= 100 ? 'text-emerald-700 font-semibold' : totalPct >= 50 ? 'text-amber-700' : 'text-rose-600 font-semibold';
-                  return el('tr', { class: 'border-b border-slate-100' },
+                  const totalColor = !u.total_target ? 'text-stone-400' : totalPct >= 100 ? 'text-emerald-700 font-semibold' : totalPct >= 50 ? 'text-amber-700' : 'text-rose-600 font-semibold';
+                  return el('tr', { class: 'border-b border-stone-100' },
                     el('td', { class: 'px-2 py-1.5 sticky left-0 bg-white font-medium' }, u.full_name || '—'),
-                    el('td', { class: 'px-2 py-1.5 text-right text-slate-600' }, String(u.daily_target || 0)),
+                    el('td', { class: 'px-2 py-1.5 text-right text-stone-600' }, String(u.daily_target || 0)),
                     ...(tg.days || []).map(d => {
                       const cell = matrixByUserDay[`${u.user_id}|${d}`] || { achieved: 0, target: u.daily_target };
                       return el('td', { class: `px-1.5 py-1.5 text-center ${cellColor(cell.achieved, cell.target)}` },
                         u.daily_target ? `${cell.achieved}/${cell.target}` : String(cell.achieved)
                       );
                     }),
-                    el('td', { class: `px-2 py-1.5 text-right bg-slate-50 ${totalColor}` },
+                    el('td', { class: `px-2 py-1.5 text-right bg-stone-50 ${totalColor}` },
                       `${u.total_achieved}/${u.total_target} (${totalPct}%)`
                     )
                   );
@@ -1443,14 +1486,14 @@
                   const grandAchieved = summary.reduce((s, u) => s + (u.total_achieved || 0), 0);
                   const grandTarget = summary.reduce((s, u) => s + (u.total_target || 0), 0);
                   const grandPct = grandTarget ? Math.round(100 * grandAchieved / grandTarget) : 0;
-                  return el('tr', { class: 'bg-slate-50 font-semibold border-t-2 border-slate-200' },
-                    el('td', { class: 'px-2 py-1.5 sticky left-0 bg-slate-50' }, 'Total'),
+                  return el('tr', { class: 'bg-stone-50 font-semibold border-t-2 border-stone-200' },
+                    el('td', { class: 'px-2 py-1.5 sticky left-0 bg-stone-50' }, 'Total'),
                     el('td', { class: 'px-2 py-1.5 text-right' }, String(grandDailyTarget)),
                     ...(tg.days || []).map(d => {
                       const dayAchieved = summary.reduce((s, u) => s + ((matrixByUserDay[`${u.user_id}|${d}`] || {}).achieved || 0), 0);
                       return el('td', { class: 'px-1.5 py-1.5 text-center' }, String(dayAchieved));
                     }),
-                    el('td', { class: 'px-2 py-1.5 text-right bg-slate-100' }, `${grandAchieved}/${grandTarget} (${grandPct}%)`)
+                    el('td', { class: 'px-2 py-1.5 text-right bg-stone-100' }, `${grandAchieved}/${grandTarget} (${grandPct}%)`)
                   );
                 })()
               )
@@ -1461,11 +1504,11 @@
 
       // Raw data export (admin only — Reports page itself is already admin-gated, this is an extra explicit check)
       // Definitions match reports_data RPC exactly: new scout = platforms row, follow-up = campaign_activities row
-      const exportCard = state.me?.role === 'admin' ? el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4 mb-4' },
+      const exportCard = state.me?.role === 'admin' ? el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4 mb-4' },
         el('h3', { class: 'text-sm font-semibold mb-1' }, 'Export raw data'),
-        el('p', { class: 'text-xs text-slate-500 mb-3' }, `For the selected date range (${reportsState.from} → ${reportsState.to}).`),
+        el('p', { class: 'text-xs text-stone-500 mb-3' }, `For the selected date range (${reportsState.from} → ${reportsState.to}).`),
         el('div', { class: 'flex flex-wrap gap-2' },
-          el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-white border border-slate-200 hover:bg-slate-50 text-slate-700',
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-lg bg-white border border-stone-200 hover:bg-stone-50 text-stone-700',
             onClick: async () => {
               const { data, error } = await supabase.from('platforms')
                 .select(`created_at, platform, username, profile:profiles ( name, email, region ), agent:team_members!created_by ( full_name )`)
@@ -1481,7 +1524,7 @@
                   { label: 'Platform', value: 'platform' }, { label: 'Username', value: 'username' }
                 ]));
             } }, '⬇ New scouts (raw)'),
-          el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-white border border-slate-200 hover:bg-slate-50 text-slate-700',
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-lg bg-white border border-stone-200 hover:bg-stone-50 text-stone-700',
             onClick: async () => {
               const { data, error } = await supabase.from('campaign_activities')
                 .select(`created_at, activity_type, note, campaign:campaigns ( name, platform:platforms ( profile:profiles ( email, region ) ) ), user:team_members!campaign_activities_user_id_fkey ( full_name )`)
@@ -1497,7 +1540,7 @@
                   { label: 'Type', value: 'type' }, { label: 'Note', value: 'note' }
                 ]));
             } }, '⬇ Follow-ups (raw)'),
-          el('button', { class: 'px-3 py-1.5 text-sm rounded-md bg-white border border-slate-200 hover:bg-slate-50 text-slate-700',
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-lg bg-white border border-stone-200 hover:bg-stone-50 text-stone-700',
             onClick: () => {
               const rows = (reportsState.targets?.matrix || []).map(m => ({ user_id: m.user_id, date: m.d, achieved: m.achieved, target: m.target }));
               if (!rows.length) return toast('No target data in this range', 'error');
@@ -1512,7 +1555,7 @@
 
       return el('div', {},
         pageHeader('Insights', 'Reports', 'Activity and performance over a custom date range', null),
-        dateBar, exportCard, hourlyCard, targetCard, agentDaily, matrixCard, l2eCard, dropCard
+        dateBar, exportCard, hourlyCard, goneLiveCard, targetCard, agentDaily, matrixCard, l2eCard, dropCard
       );
     }
 
@@ -1566,7 +1609,7 @@
         const otherMembers = m.filter(x => x.user_id !== member.user_id && x.is_active);
         if (!otherMembers.length) return toast('No other active members to reassign to', 'error');
 
-        const targetSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-slate-400' },
+        const targetSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' },
           el('option', { value: '' }, '— Pick a team member —'),
           ...otherMembers.map(x => el('option', { value: x.user_id }, `${x.full_name || x.email} (${x.role})`))
         );
@@ -1578,7 +1621,7 @@
           .not('group_status', 'in', '("Dropped","Post Gone Live")')
           .then(({ count }) => { countEl.textContent = String(count || 0); });
 
-        const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Reassign all');
+        const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand' }, 'Reassign all');
         submitBtn.addEventListener('click', async () => {
           if (!targetSel.value) return toast('Pick a target team member', 'error');
           if (!confirm(`Move all active campaigns from ${member.full_name || member.email} to the selected member?`)) return;
@@ -1595,19 +1638,19 @@
         });
 
         const wrap = el('div', { class: 'space-y-3' },
-          el('p', { class: 'text-sm text-slate-600' }, 'Moving active (non-terminal) campaigns from ',
+          el('p', { class: 'text-sm text-stone-600' }, 'Moving active (non-terminal) campaigns from ',
             el('span', { class: 'font-semibold' }, member.full_name || member.email),
             ' (', countEl, ' campaigns)'
           ),
           el('label', { class: 'block' },
-            el('span', { class: 'text-xs font-medium text-slate-600' }, 'Reassign to *'),
+            el('span', { class: 'text-xs font-medium text-stone-600' }, 'Reassign to *'),
             targetSel
           ),
           el('p', { class: 'text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5' },
             'This only moves Open/Active campaigns. Dropped & Post Gone Live ones stay with the original owner for historical accuracy.'
           ),
-          el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-slate-200' },
-            el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+          el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-stone-200' },
+            el('button', { class: 'px-3 py-1.5 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50', onClick: () => modal.close() }, 'Cancel'),
             submitBtn
           )
         );
@@ -1623,8 +1666,8 @@
         await fetchTeam(); render();
       };
 
-      const pocSection = teamState.pocs.length ? el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden mb-4' },
-        el('div', { class: 'px-4 py-2.5 border-b border-slate-200 bg-amber-50 flex items-center justify-between' },
+      const pocSection = teamState.pocs.length ? el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden mb-4' },
+        el('div', { class: 'px-4 py-2.5 border-b border-stone-200 bg-amber-50 flex items-center justify-between' },
           el('div', {},
             el('div', { class: 'text-sm font-semibold text-amber-900' }, 'POC Migration'),
             el('div', { class: 'text-[11px] text-amber-700 mt-0.5' }, `${teamState.pocs.length} POC names from the initial import need to be mapped to real accounts`)
@@ -1632,7 +1675,7 @@
         ),
         el('div', { class: 'overflow-x-auto' },
           el('table', { class: 'w-full text-sm' },
-            el('thead', { class: 'bg-slate-50 text-[11px] uppercase text-slate-500' },
+            el('thead', { class: 'bg-stone-50 text-[11px] uppercase text-stone-500' },
               el('tr', {},
                 el('th', { class: 'px-3 py-2 text-left' }, 'Imported POC'),
                 el('th', { class: 'px-3 py-2 text-right' }, 'Profiles'),
@@ -1644,18 +1687,18 @@
             ),
             el('tbody', {},
               ...teamState.pocs.map(p => {
-                const sel = el('select', { class: 'px-2 py-1 text-sm border border-slate-200 rounded w-full max-w-[220px]' },
+                const sel = el('select', { class: 'px-2 py-1 text-sm border border-stone-200 rounded w-full max-w-[220px]' },
                   el('option', { value: '' }, '— Pick a signed-in member —'),
                   ...m.filter(x => x.is_active).map(x => el('option', { value: x.user_id, 'data-name': x.full_name || x.email }, x.full_name || x.email))
                 );
-                return el('tr', { class: 'border-b border-slate-100' },
+                return el('tr', { class: 'border-b border-stone-100' },
                   el('td', { class: 'px-3 py-2 font-medium' }, p.poc),
                   el('td', { class: 'px-3 py-2 text-right' }, String(p.profiles)),
                   el('td', { class: 'px-3 py-2 text-right' }, String(p.platforms)),
                   el('td', { class: 'px-3 py-2 text-right' }, String(p.campaigns)),
                   el('td', { class: 'px-3 py-2' }, sel),
                   el('td', { class: 'px-3 py-2 text-right' },
-                    el('button', { class: 'px-2 py-1 text-xs rounded-md btn-brand',
+                    el('button', { class: 'px-2 py-1 text-xs rounded-lg btn-brand',
                       onClick: () => {
                         const opt = sel.options[sel.selectedIndex];
                         migratePOC(p.poc, sel.value, opt.getAttribute('data-name') || opt.textContent);
@@ -1670,14 +1713,14 @@
 
       return el('div', {},
         pageHeader('Administration', 'Team', `${m.length} members · manage roles and team leads`, null),
-        el('div', { class: 'bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-900' },
+        el('div', { class: 'bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 text-xs text-blue-900' },
           'Team members appear here after they sign in via Google for the first time. Then you can promote them to TL or admin, assign team leads, or deactivate.'
         ),
         pocSection,
-        el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden' },
+        el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden' },
           el('div', { class: 'overflow-x-auto' },
             el('table', { class: 'w-full text-sm' },
-              el('thead', { class: 'bg-slate-50 text-[11px] uppercase text-slate-500' },
+              el('thead', { class: 'bg-stone-50 text-[11px] uppercase text-stone-500' },
                 el('tr', {},
                   el('th', { class: 'px-3 py-2 text-left' }, 'Name'),
                   el('th', { class: 'px-3 py-2 text-left' }, 'Email'),
@@ -1689,21 +1732,21 @@
                 )
               ),
               el('tbody', {},
-                ...m.map(x => el('tr', { class: 'border-b border-slate-100' },
+                ...m.map(x => el('tr', { class: 'border-b border-stone-100' },
                   el('td', { class: 'px-3 py-2' }, x.full_name || '—'),
-                  el('td', { class: 'px-3 py-2 text-xs text-slate-600' }, x.email),
+                  el('td', { class: 'px-3 py-2 text-xs text-stone-600' }, x.email),
                   el('td', { class: 'px-3 py-2' },
-                    el('select', { class: 'px-2 py-1 text-sm border border-slate-200 rounded',
+                    el('select', { class: 'px-2 py-1 text-sm border border-stone-200 rounded',
                       onchange: e => updateRole(x.user_id, e.target.value) },
                       ...['user','tl','admin'].map(r => el('option', { value: r, selected: x.role === r }, r))
                     )
                   ),
                   el('td', { class: 'px-3 py-2' },
-                    x.role === 'user' ? el('select', { class: 'px-2 py-1 text-sm border border-slate-200 rounded',
+                    x.role === 'user' ? el('select', { class: 'px-2 py-1 text-sm border border-stone-200 rounded',
                       onchange: e => updateTL(x.user_id, e.target.value) },
                       el('option', { value: '' }, '—'),
                       ...tls.map(t => el('option', { value: t.user_id, selected: x.team_lead_id === t.user_id }, t.full_name || t.email))
-                    ) : el('span', { class: 'text-xs text-slate-400' }, '—')
+                    ) : el('span', { class: 'text-xs text-stone-400' }, '—')
                   ),
                   el('td', { class: 'px-3 py-2 text-center' },
                     el('input', { type: 'checkbox', checked: x.is_active, onchange: e => updateActive(x.user_id, e.target.checked) })
@@ -1712,7 +1755,7 @@
                     el('input', {
                       type: 'number', min: 0,
                       value: x.target?.[0]?.daily_target ?? 10,
-                      class: 'w-16 px-2 py-1 text-sm text-right border border-slate-200 rounded',
+                      class: 'w-16 px-2 py-1 text-sm text-right border border-stone-200 rounded',
                       onblur: e => updateTarget(x.user_id, e.target.value)
                     })
                   ),
@@ -1774,8 +1817,8 @@
     function openImportCSVModal() {
       const sampleHeaders = ['lead_type','name','email','phone','region','languages','platform','username','link','genre','avg_views','followers'];
       const fileInp = el('input', { type: 'file', accept: '.csv', class: 'w-full text-xs' });
-      const summary = el('div', { class: 'text-xs text-slate-600 space-y-1' });
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand', disabled: true }, 'Import');
+      const summary = el('div', { class: 'text-xs text-stone-600 space-y-1' });
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand', disabled: true }, 'Import');
 
       let parsed = null;
       fileInp.addEventListener('change', () => {
@@ -1840,12 +1883,12 @@
       });
 
       const wrap = el('div', { class: 'space-y-3' },
-        el('p', { class: 'text-xs text-slate-600' }, 'CSV columns expected (case-insensitive). Languages can be semicolon-separated. Required: name, platform, username.'),
-        el('p', { class: 'text-[11px] font-mono bg-slate-100 px-2 py-1 rounded break-all' }, sampleHeaders.join(',')),
+        el('p', { class: 'text-xs text-stone-600' }, 'CSV columns expected (case-insensitive). Languages can be semicolon-separated. Required: name, platform, username.'),
+        el('p', { class: 'text-[11px] font-mono bg-stone-100 px-2 py-1 rounded break-all' }, sampleHeaders.join(',')),
         fileInp,
         summary,
         el('div', { class: 'flex justify-end gap-2 pt-2' },
-          el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50', onClick: () => modal.close() }, 'Cancel'),
           submitBtn
         )
       );
@@ -1999,9 +2042,9 @@
 
       const wrap = el('div', { class: 'space-y-3' });
       const fields = {};
-      const conditionalArea = el('div', { class: 'space-y-2 pt-2 border-t border-slate-200' });
+      const conditionalArea = el('div', { class: 'space-y-2 pt-2 border-t border-stone-200' });
 
-      const subSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+      const subSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
       subSel.appendChild(el('option', { value: '' }, '— Pick new sub-status —'));
       allSubStatusesWithLock(c.sub_status).forEach(({ group, subs }) => {
         const og = document.createElement('optgroup');
@@ -2016,12 +2059,12 @@
       fields.sub_status = subSel;
 
       const fuWrap = el('label', { class: 'block' },
-        el('span', { class: 'text-xs font-medium text-slate-600' }, 'Next Follow-up (date & time) *'),
-        fields.next_followup_at = el('input', { type: 'datetime-local', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' })
+        el('span', { class: 'text-xs font-medium text-stone-600' }, 'Next Follow-up (date & time) *'),
+        fields.next_followup_at = el('input', { type: 'datetime-local', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' })
       );
       const fuNote = el('label', { class: 'block' },
-        el('span', { class: 'text-xs font-medium text-slate-600' }, 'Follow-up note (optional)'),
-        fields.next_followup_note = el('input', { type: 'text', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' })
+        el('span', { class: 'text-xs font-medium text-stone-600' }, 'Follow-up note (optional)'),
+        fields.next_followup_note = el('input', { type: 'text', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' })
       );
 
       const renderConditional = () => {
@@ -2034,11 +2077,11 @@
 
         // Gone Live mandatory block
         if (target === 'Gone Live') {
-          fields.gone_live_date = el('input', { type: 'date', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
-          fields.spends_inr     = el('input', { type: 'number', step: '0.01', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.gone_live_date = el('input', { type: 'date', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
+          fields.spends_inr     = el('input', { type: 'number', step: '0.01', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
           fields._course_id     = el('input', { type: 'hidden' });
           fields._fmt            = el('input', { type: 'hidden' });
-          fields._subject        = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+          fields._subject        = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' },
             el('option', { value: '' }, '—'),
             ...Object.keys(SUBJECT_COURSE_MAP).map(s => el('option', { value: s }, s))
           );
@@ -2048,19 +2091,19 @@
             fields._fmt.value = m ? m.fmt : '';
             buildUtmLink(c, fields);
           });
-          fields.utm_link       = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.utm_link       = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
           fields.utm_medium     = el('input', { type: 'hidden' });
-          fields.utm_content    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+          fields.utm_content    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' },
             el('option', { value: '' }, '—'),
             ...(state.filterOptions?.utm_content || []).map(u => el('option', { value: u }, u))
           );
           fields.utm_content.addEventListener('change', () => buildUtmLink(c, fields));
-          fields.is_recollab    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+          fields.is_recollab    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' },
             el('option', { value: '' }, '—'),
             el('option', { value: 'false' }, 'New collab'),
             el('option', { value: 'true' }, 'Re-collab (RCB)')
           );
-          fields.rcb_count      = el('input', { type: 'number', disabled: true, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md disabled:bg-slate-100' });
+          fields.rcb_count      = el('input', { type: 'number', disabled: true, class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg disabled:bg-stone-100' });
           fields.is_recollab.addEventListener('change', () => { fields.rcb_count.disabled = fields.is_recollab.value !== 'true'; buildUtmLink(c, fields); });
           fields.gone_live_date.addEventListener('input', () => buildUtmLink(c, fields));
 
@@ -2072,19 +2115,19 @@
             ['UTM Medium * (drives auto-task)', fields.utm_content],
             ['UTM Content *', fields.is_recollab],
             ['RCB Count (if Re-collab)', fields.rcb_count],
-          ].forEach(([lbl, inp]) => conditionalArea.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, lbl), inp)));
+          ].forEach(([lbl, inp]) => conditionalArea.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-stone-600' }, lbl), inp)));
         }
 
         // Post Gone Live mandatory block
         if (target === 'Post Gone Live') {
-          fields.gone_live_link    = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
-          fields.insights          = el('textarea', { rows: 3, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
-          fields.google_drive_link = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.gone_live_link    = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
+          fields.insights          = el('textarea', { rows: 3, class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
+          fields.google_drive_link = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
           [
             ['Gone Live Link *', fields.gone_live_link],
             ['Insights *', fields.insights],
             ['Google Drive Link *', fields.google_drive_link],
-          ].forEach(([lbl, inp]) => conditionalArea.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, lbl), inp)));
+          ].forEach(([lbl, inp]) => conditionalArea.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-stone-600' }, lbl), inp)));
         }
 
         // Agreement / Invoice file upload
@@ -2094,7 +2137,7 @@
           fields._file = fileInp;
           fields._fileKind = which;
           conditionalArea.appendChild(el('label', { class: 'block' },
-            el('span', { class: 'text-xs font-medium text-slate-600' }, `Upload ${which} file *`),
+            el('span', { class: 'text-xs font-medium text-stone-600' }, `Upload ${which} file *`),
             fileInp
           ));
         }
@@ -2107,7 +2150,7 @@
       };
       fields.sub_status.addEventListener('change', renderConditional);
 
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Save status change');
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand' }, 'Save status change');
       submitBtn.addEventListener('click', async () => {
         const target = fields.sub_status.value;
         if (!target) return toast('Pick a sub-status', 'error');
@@ -2167,12 +2210,12 @@
       });
 
       wrap.appendChild(el('label', { class: 'block' },
-        el('span', { class: 'text-xs font-medium text-slate-600' }, 'New Sub-status *'),
+        el('span', { class: 'text-xs font-medium text-stone-600' }, 'New Sub-status *'),
         subSel
       ));
       wrap.appendChild(conditionalArea);
-      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 border-t border-slate-200' },
-        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 border-t border-stone-200' },
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50', onClick: () => modal.close() }, 'Cancel'),
         submitBtn
       ));
 
@@ -2189,20 +2232,20 @@
       const isTerminalNow = ['Dropped','Post Gone Live'].includes(c.group_status);
 
       // --- Activity section ---
-      fields.activity_type = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+      fields.activity_type = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' },
         ...['call','whatsapp','email','dm','comment'].map(t => el('option', { value: t }, t))
       );
-      fields.note = el('textarea', { rows: 3, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md', placeholder: 'What happened?' });
+      fields.note = el('textarea', { rows: 3, class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg', placeholder: 'What happened?' });
 
-      wrap.appendChild(el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-slate-500' }, 'Activity'));
-      wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, 'Type *'), fields.activity_type));
-      wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, 'Note'), fields.note));
+      wrap.appendChild(el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-stone-500' }, 'Activity'));
+      wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-stone-600' }, 'Type *'), fields.activity_type));
+      wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-stone-600' }, 'Note'), fields.note));
 
       // --- Stage section ---
-      wrap.appendChild(el('div', { class: 'pt-3 mt-3 border-t border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-500' }, 'Stage'));
-      wrap.appendChild(el('div', { class: 'text-xs text-slate-600' },
+      wrap.appendChild(el('div', { class: 'pt-3 mt-3 border-t border-stone-200 text-[11px] font-semibold uppercase tracking-wide text-stone-500' }, 'Stage'));
+      wrap.appendChild(el('div', { class: 'text-xs text-stone-600' },
         'Current: ', el('span', { class: `badge ${groupStatusColor(c.group_status)}` }, c.group_status), ' · ',
-        el('span', { class: 'text-slate-500' }, c.sub_status)
+        el('span', { class: 'text-stone-500' }, c.sub_status)
       ));
 
       if (isTerminalNow) {
@@ -2213,7 +2256,7 @@
 
       // Sub-status dropdown grouped by Stage (optgroup) — shows ALL stages/sub-statuses;
       // backward ones are visible but disabled (locked) rather than hidden.
-      const subSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+      const subSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
       subSel.appendChild(el('option', { value: '' }, '— No stage change —'));
       if (!isTerminalNow) {
         allSubStatusesWithLock(c.sub_status).forEach(({ group, subs }) => {
@@ -2231,7 +2274,7 @@
 
       if (!isTerminalNow) {
         wrap.appendChild(el('label', { class: 'block' },
-          el('span', { class: 'text-xs font-medium text-slate-600' }, 'Move to Sub-stage (optional, grouped by Stage)'),
+          el('span', { class: 'text-xs font-medium text-stone-600' }, 'Move to Sub-stage (optional, grouped by Stage)'),
           subSel
         ));
       }
@@ -2241,15 +2284,15 @@
       wrap.appendChild(conditionalArea);
 
       // --- Follow-up section ---
-      const fuWrap = el('div', { class: 'pt-3 mt-3 border-t border-slate-200' },
-        el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Follow-up'),
+      const fuWrap = el('div', { class: 'pt-3 mt-3 border-t border-stone-200' },
+        el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-stone-500 mb-2' }, 'Follow-up'),
         el('label', { class: 'block' },
-          el('span', { class: 'text-xs font-medium text-slate-600' }, 'Next follow-up (date & time) *'),
-          fields.next_followup_at = el('input', { type: 'datetime-local', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' })
+          el('span', { class: 'text-xs font-medium text-stone-600' }, 'Next follow-up (date & time) *'),
+          fields.next_followup_at = el('input', { type: 'datetime-local', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' })
         ),
         el('label', { class: 'block' },
-          el('span', { class: 'text-xs font-medium text-slate-600' }, 'Follow-up note (optional)'),
-          fields.next_followup_note = el('input', { type: 'text', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' })
+          el('span', { class: 'text-xs font-medium text-stone-600' }, 'Follow-up note (optional)'),
+          fields.next_followup_note = el('input', { type: 'text', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' })
         )
       );
 
@@ -2260,11 +2303,11 @@
         const targetGroup = target ? map.find(m => m.sub === target)?.group : null;
 
         if (target === 'Gone Live') {
-          fields.gone_live_date = el('input', { type: 'date', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
-          fields.spends_inr     = el('input', { type: 'number', step: '0.01', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.gone_live_date = el('input', { type: 'date', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
+          fields.spends_inr     = el('input', { type: 'number', step: '0.01', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
           fields._course_id     = el('input', { type: 'hidden' });
           fields._fmt            = el('input', { type: 'hidden' });
-          fields._subject        = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+          fields._subject        = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' },
             el('option', { value: '' }, '—'),
             ...Object.keys(SUBJECT_COURSE_MAP).map(s => el('option', { value: s }, s))
           );
@@ -2274,19 +2317,19 @@
             fields._fmt.value = m ? m.fmt : '';
             buildUtmLink(c, fields);
           });
-          fields.utm_link       = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.utm_link       = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
           fields.utm_medium     = el('input', { type: 'hidden' });
-          fields.utm_content    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+          fields.utm_content    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' },
             el('option', { value: '' }, '—'),
             ...(state.filterOptions?.utm_content || []).map(u => el('option', { value: u }, u))
           );
           fields.utm_content.addEventListener('change', () => buildUtmLink(c, fields));
-          fields.is_recollab    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+          fields.is_recollab    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' },
             el('option', { value: '' }, '—'),
             el('option', { value: 'false' }, 'New collab'),
             el('option', { value: 'true' }, 'Re-collab (RCB)')
           );
-          fields.rcb_count      = el('input', { type: 'number', disabled: true, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md disabled:bg-slate-100' });
+          fields.rcb_count      = el('input', { type: 'number', disabled: true, class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg disabled:bg-stone-100' });
           fields.is_recollab.addEventListener('change', () => { fields.rcb_count.disabled = fields.is_recollab.value !== 'true'; buildUtmLink(c, fields); });
           fields.gone_live_date.addEventListener('input', () => buildUtmLink(c, fields));
 
@@ -2299,19 +2342,19 @@
             ['UTM Medium * (drives auto-task)', fields.utm_content],
             ['UTM Content *', fields.is_recollab],
             ['RCB Count (if Re-collab)', fields.rcb_count],
-          ].forEach(([lbl, inp]) => conditionalArea.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, lbl), inp)));
+          ].forEach(([lbl, inp]) => conditionalArea.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-stone-600' }, lbl), inp)));
         }
 
         if (target === 'Post Gone Live') {
-          fields.gone_live_link    = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
-          fields.insights          = el('textarea', { rows: 3, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
-          fields.google_drive_link = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+          fields.gone_live_link    = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
+          fields.insights          = el('textarea', { rows: 3, class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
+          fields.google_drive_link = el('input', { type: 'url', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
           conditionalArea.appendChild(el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-emerald-700 pt-1' }, 'Post Gone Live — required fields'));
           [
             ['Gone Live Link *', fields.gone_live_link],
             ['Insights *', fields.insights],
             ['Google Drive Link *', fields.google_drive_link],
-          ].forEach(([lbl, inp]) => conditionalArea.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, lbl), inp)));
+          ].forEach(([lbl, inp]) => conditionalArea.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-stone-600' }, lbl), inp)));
         }
 
         if (target === 'agreement done' || target === 'invoice done') {
@@ -2320,7 +2363,7 @@
           fields._fileKind = which;
           conditionalArea.appendChild(el('div', { class: 'text-[11px] font-semibold uppercase tracking-wide text-indigo-700 pt-1' }, 'Document upload'));
           conditionalArea.appendChild(el('label', { class: 'block' },
-            el('span', { class: 'text-xs font-medium text-slate-600' }, `Upload ${which} file *`),
+            el('span', { class: 'text-xs font-medium text-stone-600' }, `Upload ${which} file *`),
             fields._file
           ));
         }
@@ -2334,7 +2377,7 @@
       renderConditional();
 
       // --- Submit ---
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Save');
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand' }, 'Save');
       submitBtn.addEventListener('click', async () => {
         const target = fields.sub_status?.value || '';
         const map = state.filterOptions?.sub_statuses || [];
@@ -2409,8 +2452,8 @@
         render();
       });
 
-      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-3 border-t border-slate-200' },
-        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-3 border-t border-stone-200' },
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50', onClick: () => modal.close() }, 'Cancel'),
         submitBtn
       ));
 
@@ -2422,11 +2465,11 @@
     // ===============================================================
     function openReassignModal(c) {
       const wrap = el('div', { class: 'space-y-3' });
-      const sel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+      const sel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' },
         ...(state.filterOptions?.owners || []).map(o => el('option', { value: o.id, selected: c.owner_id === o.id }, o.name || '—'))
       );
-      wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, 'New Owner *'), sel));
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Reassign');
+      wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-stone-600' }, 'New Owner *'), sel));
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand' }, 'Reassign');
       submitBtn.addEventListener('click', async () => {
         submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
         const { error } = await supabase.from('campaigns').update({ owner_id: sel.value }).eq('id', c.id);
@@ -2437,7 +2480,7 @@
         render();
       });
       wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-2' },
-        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50', onClick: () => modal.close() }, 'Cancel'),
         submitBtn
       ));
       const modal = renderModal('Reassign Campaign Owner', wrap);
@@ -2449,8 +2492,8 @@
       const fields = {};
       const wrap = el('div', { class: 'space-y-3' });
 
-      fields.gone_live_date = el('input', { type: 'date', value: c.gone_live_date || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
-      fields.spends_inr     = el('input', { type: 'number', step: '0.01', value: c.spends_inr ?? '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+      fields.gone_live_date = el('input', { type: 'date', value: c.gone_live_date || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
+      fields.spends_inr     = el('input', { type: 'number', step: '0.01', value: c.spends_inr ?? '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
 
       // Reverse-detect courseId/fmt (and matching Subject) from the campaign's existing UTM link,
       // so changing any other field regenerates correctly without forcing a fresh Subject pick.
@@ -2465,7 +2508,7 @@
 
       fields._course_id     = el('input', { type: 'hidden', value: detectedCourseId });
       fields._fmt            = el('input', { type: 'hidden', value: detectedFmt });
-      fields._subject        = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+      fields._subject        = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' },
         el('option', { value: '' }, '— Pick to regenerate link —'),
         ...Object.keys(SUBJECT_COURSE_MAP).map(s => el('option', { value: s, selected: s === detectedSubject }, s))
       );
@@ -2475,19 +2518,19 @@
         fields._fmt.value = m ? m.fmt : '';
         buildUtmLink(c, fields);
       });
-      fields.utm_link       = el('input', { type: 'url', value: c.utm_link || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
+      fields.utm_link       = el('input', { type: 'url', value: c.utm_link || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' });
       fields.utm_medium     = el('input', { type: 'hidden', value: c.utm_medium || '' });
-      fields.utm_content    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+      fields.utm_content    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' },
         el('option', { value: '' }, '—'),
         ...(state.filterOptions?.utm_content || []).map(u => el('option', { value: u, selected: c.utm_content === u }, u))
       );
       fields.utm_content.addEventListener('change', () => buildUtmLink(c, fields));
-      fields.is_recollab    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
+      fields.is_recollab    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' },
         el('option', { value: '', selected: c.is_recollab == null }, '—'),
         el('option', { value: 'false', selected: c.is_recollab === false }, 'New collab'),
         el('option', { value: 'true', selected: c.is_recollab === true }, 'Re-collab (RCB)')
       );
-      fields.rcb_count      = el('input', { type: 'number', value: c.rcb_count ?? '', disabled: !c.is_recollab, class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md disabled:bg-slate-100' });
+      fields.rcb_count      = el('input', { type: 'number', value: c.rcb_count ?? '', disabled: !c.is_recollab, class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg disabled:bg-stone-100' });
       fields.is_recollab.addEventListener('change', () => { fields.rcb_count.disabled = fields.is_recollab.value !== 'true'; buildUtmLink(c, fields); });
       fields.gone_live_date.addEventListener('input', () => buildUtmLink(c, fields));
 
@@ -2502,9 +2545,9 @@
         ['UTM Medium *', fields.utm_content],
         ['UTM Content *', fields.is_recollab],
         ['RCB Count (if Re-collab)', fields.rcb_count],
-      ].forEach(([lbl, inp]) => wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-slate-600' }, lbl), inp)));
+      ].forEach(([lbl, inp]) => wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-stone-600' }, lbl), inp)));
 
-      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand' }, 'Save changes');
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand' }, 'Save changes');
       submitBtn.addEventListener('click', async () => {
         const payload = {
           gone_live_date: fields.gone_live_date.value || null,
@@ -2525,8 +2568,8 @@
         render();
       });
 
-      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-slate-200' },
-        el('button', { class: 'px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50', onClick: () => modal.close() }, 'Cancel'),
+      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-stone-200' },
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50', onClick: () => modal.close() }, 'Cancel'),
         submitBtn
       ));
       const modal = renderModal('Edit Gone Live Details', wrap);
@@ -2537,7 +2580,7 @@
     // ===============================================================
     function viewCampaignDetail() {
       const c = state.detail.campaign;
-      if (state.detail.loading || !c) return el('div', { class: 'text-center text-sm text-slate-500 py-10' }, 'Loading…');
+      if (state.detail.loading || !c) return el('div', { class: 'text-center text-sm text-stone-500 py-10' }, 'Loading…');
 
       const p  = c.platform?.profile;
       const pl = c.platform;
@@ -2548,149 +2591,149 @@
 
       // Header
       const header = el('div', { class: 'mb-5' },
-        el('a', { href: '#campaigns', class: 'text-[11px] font-semibold text-slate-400 uppercase tracking-[0.08em] hover:text-brand' }, '← Campaigns'),
+        el('a', { href: '#campaigns', class: 'text-[11px] font-semibold text-stone-400 uppercase tracking-[0.08em] hover:text-brand' }, '← Campaigns'),
         el('div', { class: 'flex items-start justify-between gap-4 mt-1.5 flex-wrap' },
           el('div', { class: 'flex items-center gap-3' },
             avatar(p.name, 44),
             el('div', {},
-              el('h1', { class: 'text-[22px] font-semibold tracking-tight text-slate-900' }, p.name),
-              el('div', { class: 'flex items-center gap-2 mt-0.5 text-[12px] text-slate-500' },
+              el('h1', { class: 'text-[22px] font-semibold tracking-tight text-stone-900' }, p.name),
+              el('div', { class: 'flex items-center gap-2 mt-0.5 text-[12px] text-stone-500' },
                 el('span', { class: 'font-mono' }, c.name),
                 el('span', {}, '·'),
                 el('span', {}, `${pl.platform} @${pl.username}`),
                 el('span', {}, '·'),
                 subtleBadge(c.group_status, stageVariant),
-                el('span', { class: 'text-[11px] text-slate-400' }, c.sub_status)
+                el('span', { class: 'text-[11px] text-stone-400' }, c.sub_status)
               )
             )
           ),
           el('div', { class: 'flex flex-wrap gap-2' },
-            canEdit ? el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand', onClick: () => openLogActivityModal(c) }, isTerminal ? '+ Log activity' : '+ Log activity / Update stage') : null,
-            canEdit ? el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-md hover:bg-slate-50 text-slate-700', onClick: () => openReassignModal(c) }, 'Reassign') : null,
+            canEdit ? el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand', onClick: () => openLogActivityModal(c) }, isTerminal ? '+ Log activity' : '+ Log activity / Update stage') : null,
+            canEdit ? el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-stone-200 rounded-lg hover:bg-stone-50 text-stone-700', onClick: () => openReassignModal(c) }, 'Reassign') : null,
           )
         )
       );
 
       // Side: profile + platform info
       const side = el('div', { class: 'space-y-3' },
-        el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
-          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Influencer'),
+        el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4' },
+          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-stone-500 mb-2' }, 'Influencer'),
           el('div', { class: 'text-sm font-medium' }, el('a', { href: `#profiles/${p.id}`, class: 'hover:underline text-blue-600' }, p.name)),
-          el('div', { class: 'mt-2 space-y-1 text-xs text-slate-600' },
+          el('div', { class: 'mt-2 space-y-1 text-xs text-stone-600' },
             p.email ? el('div', {}, '✉ ', el('a', { href: `mailto:${p.email}`, class: 'text-brand hover:underline' }, p.email)) : null,
             p.phone ? el('div', {}, '📞 ',
               el('a', { href: `tel:${p.phone}`, class: 'text-brand hover:underline mr-2' }, p.phone),
-              el('a', { href: `sms:${p.phone}`, class: 'text-slate-500 hover:underline mr-2' }, 'SMS'),
+              el('a', { href: `sms:${p.phone}`, class: 'text-stone-500 hover:underline mr-2' }, 'SMS'),
               el('a', { href: `https://wa.me/${p.phone.replace(/\D/g,'')}`, target: '_blank', class: 'text-emerald-600 hover:underline' }, 'WhatsApp')
             ) : null,
             p.region ? el('div', {}, '🌍 ', p.region) : null,
             (p.languages || []).length ? el('div', {}, '🗣 ', p.languages.join(', ')) : null,
-            el('div', {}, 'Lead type: ', el('span', { class: 'badge bg-slate-100 text-slate-700' }, p.lead_type)),
+            el('div', {}, 'Lead type: ', el('span', { class: 'badge bg-stone-100 text-stone-700' }, p.lead_type)),
           )
         ),
-        el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
-          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Platform'),
+        el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4' },
+          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-stone-500 mb-2' }, 'Platform'),
           el('div', { class: 'text-sm font-medium' }, `${pl.platform} · @${pl.username}`),
-          el('div', { class: 'mt-2 space-y-1 text-xs text-slate-600' },
+          el('div', { class: 'mt-2 space-y-1 text-xs text-stone-600' },
             pl.link ? el('div', {}, '🔗 ', el('a', { href: pl.link, target: '_blank', class: 'text-brand hover:underline break-all' }, pl.link)) : null,
             pl.genre ? el('div', {}, 'Genre: ', pl.genre) : null,
             pl.followers != null ? el('div', {}, 'Followers: ', pl.followers.toLocaleString()) : null,
             pl.avg_views != null ? el('div', {}, 'Avg views: ', pl.avg_views.toLocaleString()) : null,
           )
         ),
-        el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
-          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Follow-up'),
+        el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4' },
+          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-stone-500 mb-2' }, 'Follow-up'),
           c.next_followup_at
-            ? el('div', { class: `text-sm ${isOverdue ? 'text-rose-600 font-semibold' : 'text-slate-700'}` }, fmtDateTime(c.next_followup_at) + (isOverdue ? ' (overdue)' : ''))
-            : el('div', { class: 'text-sm text-slate-400' }, 'None scheduled'),
-          c.next_followup_note ? el('div', { class: 'text-xs text-slate-500 mt-1' }, c.next_followup_note) : null
+            ? el('div', { class: `text-sm ${isOverdue ? 'text-rose-600 font-semibold' : 'text-stone-700'}` }, fmtDateTime(c.next_followup_at) + (isOverdue ? ' (overdue)' : ''))
+            : el('div', { class: 'text-sm text-stone-400' }, 'None scheduled'),
+          c.next_followup_note ? el('div', { class: 'text-xs text-stone-500 mt-1' }, c.next_followup_note) : null
         ),
-        el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
-          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Owner'),
+        el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4' },
+          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-stone-500 mb-2' }, 'Owner'),
           el('div', { class: 'text-sm' }, c.owner?.full_name || '—'),
-          el('div', { class: 'text-xs text-slate-500 mt-1' }, c.owner?.email || ''),
+          el('div', { class: 'text-xs text-stone-500 mt-1' }, c.owner?.email || ''),
           pl.imported_poc && pl.imported_poc !== c.owner?.full_name
-            ? el('div', { class: 'text-xs mt-2 pt-2 border-t border-slate-100' },
-                el('span', { class: 'text-slate-500' }, 'POC (pending migration): '),
+            ? el('div', { class: 'text-xs mt-2 pt-2 border-t border-stone-100' },
+                el('span', { class: 'text-stone-500' }, 'POC (pending migration): '),
                 el('span', { class: 'text-amber-700 font-medium' }, pl.imported_poc)
               )
             : null
         ),
         // Files
-        el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
-          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Documents'),
+        el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4' },
+          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-stone-500 mb-2' }, 'Documents'),
           el('div', { class: 'space-y-2 text-sm' },
             c.agreement_file_url
               ? el('div', {}, '📎 Agreement: ', el('button', { class: 'text-brand hover:underline', onClick: async () => { const u = await signedUrl(c.agreement_file_url); if (u) window.open(u, '_blank'); } }, 'View'))
-              : el('div', { class: 'text-xs text-slate-400' }, 'No agreement uploaded'),
+              : el('div', { class: 'text-xs text-stone-400' }, 'No agreement uploaded'),
             c.invoice_file_url
               ? el('div', {}, '🧾 Invoice: ', el('button', { class: 'text-brand hover:underline', onClick: async () => { const u = await signedUrl(c.invoice_file_url); if (u) window.open(u, '_blank'); } }, 'View'))
-              : el('div', { class: 'text-xs text-slate-400' }, 'No invoice uploaded')
+              : el('div', { class: 'text-xs text-stone-400' }, 'No invoice uploaded')
           )
         )
       );
 
       // Gone Live block (if filled)
-      const goneLiveBlock = (c.gone_live_date || c.spends_inr) ? el('div', { class: 'bg-white border border-emerald-200 rounded-lg p-4 mb-3' },
+      const goneLiveBlock = (c.gone_live_date || c.spends_inr) ? el('div', { class: 'bg-white border border-emerald-200 rounded-xl p-4 mb-3' },
         el('div', { class: 'flex items-center justify-between mb-2' },
           el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-emerald-700' }, 'Gone Live'),
           canEdit ? el('button', { class: 'text-xs text-brand hover:underline', onClick: () => openEditGoneLiveModal(c) }, 'Edit') : null
         ),
         el('div', { class: 'grid grid-cols-2 gap-2 text-xs' },
-          el('div', {}, el('span', { class: 'text-slate-500' }, 'Date: '), fmtDate(c.gone_live_date)),
-          el('div', {}, el('span', { class: 'text-slate-500' }, 'Spends: '), c.spends_inr ? `₹${c.spends_inr}` : '—'),
-          el('div', { class: 'col-span-2' }, el('span', { class: 'text-slate-500' }, 'UTM Link: '), c.utm_link ? el('a', { href: c.utm_link, target: '_blank', class: 'text-brand hover:underline break-all' }, c.utm_link) : '—'),
-          el('div', {}, el('span', { class: 'text-slate-500' }, 'UTM Content: '), c.utm_content || '—'),
-          el('div', {}, el('span', { class: 'text-slate-500' }, 'Type: '), c.is_recollab ? `Re-collab (${c.rcb_count || '?'})` : 'New'),
-          c.gone_live_link ? el('div', { class: 'col-span-2' }, el('span', { class: 'text-slate-500' }, 'Gone Live Link: '), el('a', { href: c.gone_live_link, target: '_blank', class: 'text-brand hover:underline break-all' }, c.gone_live_link)) : null,
-          c.google_drive_link ? el('div', { class: 'col-span-2' }, el('span', { class: 'text-slate-500' }, 'Drive: '), el('a', { href: c.google_drive_link, target: '_blank', class: 'text-brand hover:underline break-all' }, c.google_drive_link)) : null,
-          c.insights ? el('div', { class: 'col-span-2' }, el('span', { class: 'text-slate-500' }, 'Insights: '), c.insights) : null,
+          el('div', {}, el('span', { class: 'text-stone-500' }, 'Date: '), fmtDate(c.gone_live_date)),
+          el('div', {}, el('span', { class: 'text-stone-500' }, 'Spends: '), c.spends_inr ? `₹${c.spends_inr}` : '—'),
+          el('div', { class: 'col-span-2' }, el('span', { class: 'text-stone-500' }, 'UTM Link: '), c.utm_link ? el('a', { href: c.utm_link, target: '_blank', class: 'text-brand hover:underline break-all' }, c.utm_link) : '—'),
+          el('div', {}, el('span', { class: 'text-stone-500' }, 'UTM Content: '), c.utm_content || '—'),
+          el('div', {}, el('span', { class: 'text-stone-500' }, 'Type: '), c.is_recollab ? `Re-collab (${c.rcb_count || '?'})` : 'New'),
+          c.gone_live_link ? el('div', { class: 'col-span-2' }, el('span', { class: 'text-stone-500' }, 'Gone Live Link: '), el('a', { href: c.gone_live_link, target: '_blank', class: 'text-brand hover:underline break-all' }, c.gone_live_link)) : null,
+          c.google_drive_link ? el('div', { class: 'col-span-2' }, el('span', { class: 'text-stone-500' }, 'Drive: '), el('a', { href: c.google_drive_link, target: '_blank', class: 'text-brand hover:underline break-all' }, c.google_drive_link)) : null,
+          c.insights ? el('div', { class: 'col-span-2' }, el('span', { class: 'text-stone-500' }, 'Insights: '), c.insights) : null,
         )
       ) : null;
 
       // Activity timeline
       const acts = state.detail.activities;
-      const ACTIVITY_BORDER = { call: 'border-blue-400', whatsapp: 'border-emerald-400', email: 'border-purple-400', dm: 'border-indigo-400', comment: 'border-slate-300', stage_change: 'border-amber-400' };
+      const ACTIVITY_BORDER = { call: 'border-blue-400', whatsapp: 'border-emerald-400', email: 'border-purple-400', dm: 'border-indigo-400', comment: 'border-stone-300', stage_change: 'border-amber-400' };
       const renderActivity = (a, isLatest) => {
         const meta = a.metadata || {};
         const isPending = isLatest && meta.followup_at && new Date(meta.followup_at) > new Date();
-        return el('div', { class: `flex items-start justify-between gap-3 pl-3 py-2.5 border-l-4 ${ACTIVITY_BORDER[a.activity_type] || 'border-slate-300'} bg-slate-50/60 rounded-r-md` },
+        return el('div', { class: `flex items-start justify-between gap-3 pl-3 py-2.5 border-l-4 ${ACTIVITY_BORDER[a.activity_type] || 'border-stone-300'} bg-stone-50/60 rounded-r-md` },
           el('div', { class: 'min-w-0 flex-1' },
             el('div', { class: 'flex items-center gap-2 flex-wrap text-sm' },
-              el('span', { class: 'font-semibold text-slate-800 capitalize' }, a.activity_type.replace('_', ' ')),
-              (meta.from && meta.to) ? el('span', { class: 'text-xs text-slate-500' }, '→ ', el('span', { class: 'font-medium text-slate-700' }, meta.to)) : null,
+              el('span', { class: 'font-semibold text-stone-800 capitalize' }, a.activity_type.replace('_', ' ')),
+              (meta.from && meta.to) ? el('span', { class: 'text-xs text-stone-500' }, '→ ', el('span', { class: 'font-medium text-stone-700' }, meta.to)) : null,
               isPending ? el('span', { class: 'badge bg-amber-100 text-amber-800' }, 'PENDING') : null
             ),
-            a.note ? el('div', { class: 'text-sm text-slate-600 mt-0.5 whitespace-pre-wrap' }, a.note) : null,
-            meta.followup_prev_at ? el('div', { class: 'text-xs text-slate-400 mt-1' }, `Follow-up scheduled from ${fmtDate(meta.followup_prev_at)}`) : null,
-            meta.followup_at ? el('div', { class: 'text-xs text-slate-400' }, `Follow-up planned: ${fmtDate(meta.followup_at)}`) : null
+            a.note ? el('div', { class: 'text-sm text-stone-600 mt-0.5 whitespace-pre-wrap' }, a.note) : null,
+            meta.followup_prev_at ? el('div', { class: 'text-xs text-stone-400 mt-1' }, `Follow-up scheduled from ${fmtDate(meta.followup_prev_at)}`) : null,
+            meta.followup_at ? el('div', { class: 'text-xs text-stone-400' }, `Follow-up planned: ${fmtDate(meta.followup_at)}`) : null
           ),
           el('div', { class: 'flex flex-col items-end gap-1 shrink-0' },
             avatar(a.user?.full_name, 22),
-            el('span', { class: 'text-[11px] text-slate-400' }, isPending ? `Scheduled for ${fmtDate(meta.followup_at)}` : relativeTime(a.created_at))
+            el('span', { class: 'text-[11px] text-stone-400' }, isPending ? `Scheduled for ${fmtDate(meta.followup_at)}` : relativeTime(a.created_at))
           )
         );
       };
-      const timeline = el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' },
+      const timeline = el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4' },
         el('h3', { class: 'text-sm font-semibold mb-3' }, `Activity timeline (${acts.length})`),
         acts.length
           ? el('div', { class: 'space-y-2' }, ...acts.map((a, i) => renderActivity(a, i === 0)))
-          : el('div', { class: 'text-sm text-slate-400 text-center py-6' }, 'No activity yet')
+          : el('div', { class: 'text-sm text-stone-400 text-center py-6' }, 'No activity yet')
       );
 
       // Audit — expanded by default so it's actually visible, not hidden behind a collapsed toggle
       const audit = state.detail.audit;
-      const auditWrap = el('details', { class: 'bg-white border border-slate-200 rounded-lg p-4 mt-3', open: true },
+      const auditWrap = el('details', { class: 'bg-white border border-stone-200 rounded-xl p-4 mt-3', open: true },
         el('summary', { class: 'text-sm font-semibold cursor-pointer' }, `Change history (${audit.length})`),
         audit.length ? el('div', { class: 'mt-3 space-y-2 text-xs' },
-          ...audit.map(a => el('div', { class: 'flex justify-between gap-3 pb-2 border-b border-slate-100 last:border-0' },
+          ...audit.map(a => el('div', { class: 'flex justify-between gap-3 pb-2 border-b border-stone-100 last:border-0' },
             el('div', { class: 'min-w-0' },
-              el('pre', { class: 'text-slate-700 whitespace-pre-wrap break-words font-mono text-[11px] bg-slate-50 rounded px-2 py-1' }, JSON.stringify(a.diff, null, 2)),
-              el('div', { class: 'text-slate-400 text-[10px] mt-1' }, a.user?.full_name || '—')
+              el('pre', { class: 'text-stone-700 whitespace-pre-wrap break-words font-mono text-[11px] bg-stone-50 rounded px-2 py-1' }, JSON.stringify(a.diff, null, 2)),
+              el('div', { class: 'text-stone-400 text-[10px] mt-1' }, a.user?.full_name || '—')
             ),
-            el('div', { class: 'text-slate-400 shrink-0' }, fmtDateTime(a.changed_at))
+            el('div', { class: 'text-stone-400 shrink-0' }, fmtDateTime(a.changed_at))
           ))
-        ) : el('div', { class: 'mt-3 text-xs text-slate-400' }, 'No changes logged yet')
+        ) : el('div', { class: 'mt-3 text-xs text-stone-400' }, 'No changes logged yet')
       );
 
       return el('div', {},
@@ -2707,16 +2750,16 @@
     // ===============================================================
     function viewProfileDetail() {
       const p = state.detail.profile;
-      if (state.detail.loading || !p) return el('div', { class: 'text-center text-sm text-slate-500 py-10' }, 'Loading…');
+      if (state.detail.loading || !p) return el('div', { class: 'text-center text-sm text-stone-500 py-10' }, 'Loading…');
 
       const header = el('div', { class: 'mb-5' },
-        el('a', { href: '#profiles', class: 'text-[11px] font-semibold text-slate-400 uppercase tracking-[0.08em] hover:text-brand' }, '← Profiles'),
+        el('a', { href: '#profiles', class: 'text-[11px] font-semibold text-stone-400 uppercase tracking-[0.08em] hover:text-brand' }, '← Profiles'),
         el('div', { class: 'flex items-start justify-between gap-4 mt-1.5 flex-wrap' },
           el('div', { class: 'flex items-center gap-3' },
             avatar(p.name, 44),
             el('div', {},
-              el('h1', { class: 'text-[22px] font-semibold tracking-tight text-slate-900' }, p.name),
-              el('div', { class: 'flex items-center gap-2 mt-0.5 text-[12px] text-slate-500' },
+              el('h1', { class: 'text-[22px] font-semibold tracking-tight text-stone-900' }, p.name),
+              el('div', { class: 'flex items-center gap-2 mt-0.5 text-[12px] text-stone-500' },
                 subtleBadge(p.lead_type + ' lead', 'slate'),
                 el('span', {}, '·'),
                 el('span', {}, 'Created by ' + (p.owner?.full_name || '—'))
@@ -2724,38 +2767,38 @@
             )
           ),
           el('div', { class: 'flex gap-2' },
-            el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-md hover:bg-slate-50 text-slate-700',
+            el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-stone-200 rounded-lg hover:bg-stone-50 text-stone-700',
               onClick: () => openEditProfileModal(p, async () => { await fetchProfileDetail(p.id); render(); }) }, 'Edit profile'),
-            el('button', { class: 'px-3 py-1.5 text-sm rounded-md btn-brand',
+            el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand',
               onClick: () => openAddPlatformModal(p) }, '+ Add platform')
           )
         )
       );
 
-      const contact = el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4 mb-4' },
-        el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2' }, 'Contact'),
+      const contact = el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4 mb-4' },
+        el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-stone-500 mb-2' }, 'Contact'),
         el('div', { class: 'grid grid-cols-1 md:grid-cols-2 gap-2 text-sm' },
-          el('div', {}, el('span', { class: 'text-slate-500 text-xs' }, 'Email: '),
-            p.email ? el('a', { href: `mailto:${p.email}`, class: 'text-brand hover:underline' }, p.email) : el('span', { class: 'text-slate-400' }, '—')),
-          el('div', {}, el('span', { class: 'text-slate-500 text-xs' }, 'Phone: '),
+          el('div', {}, el('span', { class: 'text-stone-500 text-xs' }, 'Email: '),
+            p.email ? el('a', { href: `mailto:${p.email}`, class: 'text-brand hover:underline' }, p.email) : el('span', { class: 'text-stone-400' }, '—')),
+          el('div', {}, el('span', { class: 'text-stone-500 text-xs' }, 'Phone: '),
             p.phone ? el('span', {},
               el('a', { href: `tel:${p.phone}`, class: 'text-brand hover:underline mr-2' }, p.phone),
-              el('a', { href: `sms:${p.phone}`, class: 'text-xs text-slate-500 hover:underline mr-1' }, '·SMS'),
+              el('a', { href: `sms:${p.phone}`, class: 'text-xs text-stone-500 hover:underline mr-1' }, '·SMS'),
               el('a', { href: `https://wa.me/${p.phone.replace(/\D/g,'')}`, target: '_blank', class: 'text-xs text-emerald-600 hover:underline' }, '·WhatsApp')
-            ) : el('span', { class: 'text-slate-400' }, '—')),
-          el('div', {}, el('span', { class: 'text-slate-500 text-xs' }, 'Region: '), p.region || '—'),
-          el('div', {}, el('span', { class: 'text-slate-500 text-xs' }, 'Languages: '), (p.languages || []).join(', ') || '—'),
+            ) : el('span', { class: 'text-stone-400' }, '—')),
+          el('div', {}, el('span', { class: 'text-stone-500 text-xs' }, 'Region: '), p.region || '—'),
+          el('div', {}, el('span', { class: 'text-stone-500 text-xs' }, 'Languages: '), (p.languages || []).join(', ') || '—'),
         )
       );
 
       const platforms = el('div', { class: 'space-y-4' },
         ...(p.platforms || []).map(pl => {
           const camps = (pl.campaigns || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
-          return el('div', { class: 'bg-white border border-slate-200 rounded-lg overflow-hidden' },
-            el('div', { class: 'px-4 py-3 border-b border-slate-200 flex items-center justify-between' },
+          return el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden' },
+            el('div', { class: 'px-4 py-3 border-b border-stone-200 flex items-center justify-between' },
               el('div', {},
                 el('div', { class: 'font-medium text-sm' }, `${pl.platform} · @${pl.username}`),
-                el('div', { class: 'text-xs text-slate-500 mt-0.5' }, [
+                el('div', { class: 'text-xs text-stone-500 mt-0.5' }, [
                   pl.followers != null ? `${pl.followers.toLocaleString()} followers` : null,
                   pl.avg_views != null ? `${pl.avg_views.toLocaleString()} avg views` : null,
                   pl.genre || null,
@@ -2764,31 +2807,31 @@
               ),
               el('div', { class: 'flex items-center gap-3' },
                 pl.link ? el('a', { href: pl.link, target: '_blank', class: 'text-xs text-brand hover:underline' }, 'Visit ↗') : null,
-                el('button', { class: 'text-xs text-slate-500 hover:text-slate-800 hover:underline',
+                el('button', { class: 'text-xs text-stone-500 hover:text-stone-800 hover:underline',
                   onClick: () => openEditPlatformModal(pl, async () => { await fetchProfileDetail(p.id); render(); }) }, 'Edit')
               )
             ),
-            el('div', { class: 'divide-y divide-slate-100' },
+            el('div', { class: 'divide-y divide-stone-100' },
               camps.length
-                ? camps.map(c => el('div', { class: 'px-4 py-2.5 hover:bg-slate-50 cursor-pointer flex items-center justify-between gap-3',
+                ? camps.map(c => el('div', { class: 'px-4 py-2.5 hover:bg-stone-50 cursor-pointer flex items-center justify-between gap-3',
                     onClick: () => { window.location.hash = `#campaigns/${c.id}`; } },
                     el('div', { class: 'flex items-center gap-2 min-w-0' },
                       el('span', { class: 'text-sm font-medium truncate' }, c.name),
                       el('span', { class: `badge ${groupStatusColor(c.group_status)}` }, c.group_status)
                     ),
-                    el('div', { class: 'text-xs text-slate-500 shrink-0' },
+                    el('div', { class: 'text-xs text-stone-500 shrink-0' },
                       (c.owner?.full_name || '—') + ' · ' + fmtDate(c.updated_at)
                     )
                   ))
-                : [el('div', { class: 'px-4 py-3 text-xs text-slate-400' }, 'No campaigns')]
+                : [el('div', { class: 'px-4 py-3 text-xs text-stone-400' }, 'No campaigns')]
             )
           );
         }),
-        !(p.platforms || []).length ? el('div', { class: 'bg-white border border-dashed border-slate-300 rounded-lg p-8 text-center text-sm text-slate-500' }, 'No platforms yet') : null
+        !(p.platforms || []).length ? el('div', { class: 'bg-white border border-dashed border-stone-300 rounded-xl p-8 text-center text-sm text-stone-500' }, 'No platforms yet') : null
       );
 
       return el('div', {}, header, contact,
-        el('h2', { class: 'text-sm font-semibold text-slate-700 mb-3' }, 'Platforms & Campaigns'),
+        el('h2', { class: 'text-sm font-semibold text-stone-700 mb-3' }, 'Platforms & Campaigns'),
         platforms
       );
     }
@@ -2829,12 +2872,12 @@
         body = r.view();
       }
 
-      const sidebar = el('aside', { id: 'sidebar', class: 'sidebar-mobile md:translate-x-0 fixed md:static z-30 inset-y-0 left-0 w-64 bg-white border-r border-slate-200 flex flex-col' },
-        el('div', { class: 'px-6 py-5 border-b border-slate-200 flex items-center justify-between' },
+      const sidebar = el('aside', { id: 'sidebar', class: 'sidebar-mobile md:translate-x-0 fixed md:static z-30 inset-y-0 left-0 w-64 bg-white border-r border-stone-200 flex flex-col' },
+        el('div', { class: 'px-6 py-5 border-b border-stone-200 flex items-center justify-between' },
           el('img', { src: 'data:image/png;base64,' + LOGO_B64, alt: 'BrightChamps', class: 'h-[100px] w-auto' }),
-          el('button', { class: 'md:hidden text-slate-500 text-2xl leading-none', onClick: () => $('#sidebar').classList.remove('open') }, '×')
+          el('button', { class: 'md:hidden text-stone-500 text-2xl leading-none', onClick: () => $('#sidebar').classList.remove('open') }, '×')
         ),
-        el('div', { class: 'px-6 pt-4 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest' }, 'Influencer CRM'),
+        el('div', { class: 'px-6 pt-4 pb-2 text-[10px] font-bold text-stone-400 uppercase tracking-widest' }, 'Influencer CRM'),
         el('nav', { class: 'flex-1 px-3 pb-3 space-y-0.5' },
           ...Object.entries(ROUTES)
             .filter(([k, r]) => !r.adminOnly || state.me?.role === 'admin')
@@ -2845,7 +2888,7 @@
                 : null;
               return el('a', {
                 href: '#' + k,
-                class: `flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-colors ${active ? 'text-white font-medium' : 'text-slate-700 hover:bg-slate-100'}`,
+                class: `flex items-center gap-3 px-3 py-2.5 text-sm rounded-xl transition-colors ${active ? 'text-white font-medium' : 'text-stone-700 hover:bg-stone-100'}`,
                 style: active ? 'background-color: var(--brand);' : ''
               },
                 el('span', { class: 'text-base' }, r.icon),
@@ -2854,27 +2897,27 @@
               );
             })
         ),
-        el('div', { class: 'px-4 py-3 border-t border-slate-200 bg-slate-50' },
+        el('div', { class: 'px-4 py-3 border-t border-stone-200 bg-stone-50' },
           el('div', { class: 'flex items-center gap-2 mb-2' },
             el('div', { class: 'w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold', style: 'background-color: var(--brand);' },
               (state.me?.full_name || state.session.user.email || '?').charAt(0).toUpperCase()
             ),
             el('div', { class: 'flex-1 min-w-0' },
-              el('div', { class: 'text-xs font-medium text-slate-800 truncate' }, state.me?.full_name || state.session.user.email),
-              el('div', { class: 'text-[10px] text-slate-500 uppercase tracking-wide' }, state.me?.role || 'user')
+              el('div', { class: 'text-xs font-medium text-stone-800 truncate' }, state.me?.full_name || state.session.user.email),
+              el('div', { class: 'text-[10px] text-stone-500 uppercase tracking-wide' }, state.me?.role || 'user')
             )
           ),
-          el('button', { class: 'w-full text-xs text-slate-600 hover:text-slate-900 border border-slate-300 hover:border-slate-400 rounded px-2 py-1.5 bg-white transition-colors', onClick: signOut }, 'Sign out')
+          el('button', { class: 'w-full text-xs text-stone-600 hover:text-stone-900 border border-stone-300 hover:border-stone-400 rounded px-2 py-1.5 bg-white transition-colors', onClick: signOut }, 'Sign out')
         )
       );
 
-      const header = el('header', { class: 'md:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between' },
-        el('button', { class: 'text-slate-700', onClick: () => $('#sidebar').classList.add('open') }, '☰'),
+      const header = el('header', { class: 'md:hidden bg-white border-b border-stone-200 px-4 py-3 flex items-center justify-between' },
+        el('button', { class: 'text-stone-700', onClick: () => $('#sidebar').classList.add('open') }, '☰'),
         el('div', { class: 'text-sm font-semibold' }, ROUTES[state.route]?.label),
         el('div', { class: 'w-6' })
       );
 
-      const main = el('main', { class: 'flex-1 overflow-y-auto scrollbar-thin bg-slate-50' },
+      const main = el('main', { class: 'flex-1 overflow-y-auto scrollbar-thin bg-stone-50' },
         header,
         el('div', { class: 'p-4 md:p-8 max-w-screen-2xl mx-auto' },
           body
@@ -2903,7 +2946,7 @@
         state.me = await loadMe();
       }
       if (!state.me) {
-        $('#app').innerHTML = `<div class="min-h-screen flex items-center justify-center text-sm text-slate-600">Your account isn't provisioned yet. Ask an admin to add you to team_members.</div>`;
+        $('#app').innerHTML = `<div class="min-h-screen flex items-center justify-center text-sm text-stone-600">Your account isn't provisioned yet. Ask an admin to add you to team_members.</div>`;
         return;
       }
 
@@ -2937,16 +2980,16 @@
     function renderLogin() {
       $('#app').innerHTML = '';
       $('#app').appendChild(
-        el('div', { class: 'min-h-screen flex items-center justify-center p-4 bg-slate-50' },
-          el('div', { class: 'bg-white border border-slate-200 rounded-xl shadow-sm p-8 w-full max-w-sm text-center' },
+        el('div', { class: 'min-h-screen flex items-center justify-center p-4 bg-stone-50' },
+          el('div', { class: 'bg-white border border-stone-200 rounded-2xl shadow-sm p-8 w-full max-w-sm text-center' },
             el('img', { src: 'data:image/png;base64,' + LOGO_B64, alt: 'BrightChamps', class: 'h-[88px] w-auto mx-auto mb-4' }),
-            el('div', { class: 'text-lg font-semibold text-slate-900 mb-1' }, 'Influencer CRM'),
-            el('div', { class: 'text-sm text-slate-500 mb-6' }, 'Sign in to continue'),
+            el('div', { class: 'text-lg font-semibold text-stone-900 mb-1' }, 'Influencer CRM'),
+            el('div', { class: 'text-sm text-stone-500 mb-6' }, 'Sign in to continue'),
             el('button', {
-              class: 'w-full px-4 py-2.5 btn-brand text-sm font-medium rounded-md flex items-center justify-center gap-2',
+              class: 'w-full px-4 py-2.5 btn-brand text-sm font-medium rounded-lg flex items-center justify-center gap-2',
               onClick: signIn
             }, '🔐  Sign in with Google'),
-            el('p', { class: 'text-[11px] text-slate-400 mt-4' }, `Restricted to @${ALLOWED_DOMAIN} accounts`)
+            el('p', { class: 'text-[11px] text-stone-400 mt-4' }, `Restricted to @${ALLOWED_DOMAIN} accounts`)
           )
         )
       );
