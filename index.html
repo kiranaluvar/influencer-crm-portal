@@ -1944,7 +1944,9 @@
       const courseId = fields._course_id?.value.trim();
       const fmt = fields._fmt?.value.trim();
       if (!courseId || !fmt || !fields.gone_live_date.value) return;
-      const medium = PLATFORM_MEDIUM_CODE[c.platform?.platform] || 'REF';
+      // "UTM Medium" as displayed to the agent is fields.utm_content (deliverable type dropdown) —
+      // use whatever they've picked there for the link, falling back to the platform code if unset.
+      const medium = fields.utm_content?.value || PLATFORM_MEDIUM_CODE[c.platform?.platform] || 'REF';
       const influencerName = (c.platform?.profile?.name || c.name || '').toLowerCase().replace(/\s+/g, '');
       const [y, m, d] = fields.gone_live_date.value.split('-');
       const dateStr = `${d}${m}${y}`; // DDMMYYYY, no separators
@@ -2021,6 +2023,7 @@
             el('option', { value: '' }, '—'),
             ...(state.filterOptions?.utm_content || []).map(u => el('option', { value: u }, u))
           );
+          fields.utm_content.addEventListener('change', () => buildUtmLink(c, fields));
           fields.is_recollab    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
             el('option', { value: '' }, '—'),
             el('option', { value: 'false' }, 'New collab'),
@@ -2245,6 +2248,7 @@
             el('option', { value: '' }, '—'),
             ...(state.filterOptions?.utm_content || []).map(u => el('option', { value: u }, u))
           );
+          fields.utm_content.addEventListener('change', () => buildUtmLink(c, fields));
           fields.is_recollab    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
             el('option', { value: '' }, '—'),
             el('option', { value: 'false' }, 'New collab'),
@@ -2414,11 +2418,23 @@
 
       fields.gone_live_date = el('input', { type: 'date', value: c.gone_live_date || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
       fields.spends_inr     = el('input', { type: 'number', step: '0.01', value: c.spends_inr ?? '', class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' });
-      fields._course_id     = el('input', { type: 'hidden' });
-      fields._fmt            = el('input', { type: 'hidden' });
+
+      // Reverse-detect courseId/fmt (and matching Subject) from the campaign's existing UTM link,
+      // so changing any other field regenerates correctly without forcing a fresh Subject pick.
+      let detectedCourseId = '', detectedFmt = '', detectedSubject = '';
+      try {
+        const u = new URL(c.utm_link || '', 'https://x');
+        detectedCourseId = u.searchParams.get('courseId') || '';
+        detectedFmt = u.searchParams.get('fmt') || '';
+        detectedSubject = Object.keys(SUBJECT_COURSE_MAP).find(s =>
+          SUBJECT_COURSE_MAP[s].courseId === detectedCourseId && SUBJECT_COURSE_MAP[s].fmt === detectedFmt) || '';
+      } catch {}
+
+      fields._course_id     = el('input', { type: 'hidden', value: detectedCourseId });
+      fields._fmt            = el('input', { type: 'hidden', value: detectedFmt });
       fields._subject        = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
         el('option', { value: '' }, '— Pick to regenerate link —'),
-        ...Object.keys(SUBJECT_COURSE_MAP).map(s => el('option', { value: s }, s))
+        ...Object.keys(SUBJECT_COURSE_MAP).map(s => el('option', { value: s, selected: s === detectedSubject }, s))
       );
       fields._subject.addEventListener('change', () => {
         const m = SUBJECT_COURSE_MAP[fields._subject.value];
@@ -2432,6 +2448,7 @@
         el('option', { value: '' }, '—'),
         ...(state.filterOptions?.utm_content || []).map(u => el('option', { value: u, selected: c.utm_content === u }, u))
       );
+      fields.utm_content.addEventListener('change', () => buildUtmLink(c, fields));
       fields.is_recollab    = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-md' },
         el('option', { value: '', selected: c.is_recollab == null }, '—'),
         el('option', { value: 'false', selected: c.is_recollab === false }, 'New collab'),
