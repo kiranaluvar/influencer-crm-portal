@@ -1944,10 +1944,11 @@
       const courseId = fields._course_id?.value.trim();
       const fmt = fields._fmt?.value.trim();
       if (!courseId || !fmt || !fields.gone_live_date.value) return;
+      const sanitize = s => (s || '').replace(/[^a-zA-Z0-9]/g, '');
       // "UTM Medium" as displayed to the agent is fields.utm_content (deliverable type dropdown) —
       // use whatever they've picked there for the link, falling back to the platform code if unset.
-      const medium = fields.utm_content?.value || PLATFORM_MEDIUM_CODE[c.platform?.platform] || 'REF';
-      const influencerName = (c.platform?.profile?.name || c.name || '').toLowerCase().replace(/\s+/g, '');
+      const medium = sanitize(fields.utm_content?.value) || PLATFORM_MEDIUM_CODE[c.platform?.platform] || 'REF';
+      const influencerName = sanitize(c.platform?.profile?.name || c.name || '').toLowerCase();
       const [y, m, d] = fields.gone_live_date.value.split('-');
       const dateStr = `${d}${m}${y}`; // DDMMYYYY, no separators
       const content = fields.is_recollab.value === 'true' ? 'RCB' : fields.is_recollab.value === 'false' ? 'New' : '';
