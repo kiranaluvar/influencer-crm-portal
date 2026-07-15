@@ -1945,15 +1945,15 @@
       const fmt = fields._fmt?.value.trim();
       if (!courseId || !fmt || !fields.gone_live_date.value) return;
       const medium = PLATFORM_MEDIUM_CODE[c.platform?.platform] || 'REF';
-      const campaignName = (c.name || '').replace(/\s+/g, '');
+      const influencerName = (c.platform?.profile?.name || c.name || '').toLowerCase().replace(/\s+/g, '');
       const [y, m, d] = fields.gone_live_date.value.split('-');
-      const dateStr = `${m}/${d}/${y}`;
+      const dateStr = `${d}${m}${y}`; // DDMMYYYY, no separators
       const content = fields.is_recollab.value === 'true' ? 'RCB' : fields.is_recollab.value === 'false' ? 'New' : '';
       const params = new URLSearchParams({
         courseId, fmt,
         utm_source: 'Influencer',
         utm_medium: medium,
-        utm_campaign: `${campaignName}${dateStr}`,
+        utm_campaign: `${influencerName}${dateStr}`,
         utm_content: content
       });
       fields.utm_link.value = `https://learn.brightchamps.com/book-trial-class?${params.toString()}#form`;
