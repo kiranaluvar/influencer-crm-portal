@@ -1942,8 +1942,10 @@
       const cur = map.find(m => m.sub === currentSub);
       if (!cur) return [];
       const curGroup = cur.group;
-      // terminal lock: Post Gone Live / Dropped → no changes
-      if (curGroup === 'Post Gone Live' || curGroup === 'Dropped') return [];
+      // terminal lock: Post Gone Live only. Dropped is reversible — a campaign can be brought
+      // back into the active pipeline from Dropped (e.g. AppSheet/reconsideration cases).
+      if (curGroup === 'Post Gone Live') return [];
+      if (curGroup === 'Dropped') return map; // from Dropped, any stage is selectable
       // Forward sort_order OR any Dropped sub_status
       return map.filter(m => {
         const idx = map.indexOf(m);
@@ -2233,7 +2235,7 @@
     function openLogActivityModal(c) {
       const fields = {};
       const wrap = el('div', { class: 'space-y-3' });
-      const isTerminalNow = ['Dropped','Post Gone Live'].includes(c.group_status);
+      const isTerminalNow = c.group_status === 'Post Gone Live';
 
       // --- Activity section ---
       fields.activity_type = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-300 rounded-lg' },
@@ -2588,7 +2590,7 @@
 
       const p  = c.platform?.profile;
       const pl = c.platform;
-      const isTerminal = ['Dropped', 'Post Gone Live'].includes(c.group_status);
+      const isTerminal = c.group_status === 'Post Gone Live';
       const canEdit = canEditCampaign(c);
       const isOverdue = c.next_followup_at && new Date(c.next_followup_at) < new Date() && !isTerminal;
       const stageVariant = { 'Scraping':'slate','Screening':'info','Negotiation':'warning','Integration Planning':'purple','Documents':'indigo','Gone Live':'success','Post Gone Live':'livedark','Dropped':'rose' }[c.group_status] || 'slate';
