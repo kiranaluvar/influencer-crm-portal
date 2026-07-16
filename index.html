@@ -1952,6 +1952,10 @@
       });
     }
 
+    // TEMPORARY: backward movement is unlocked for now (agents need to go back to e.g. "agreement done"
+    // to attach docs even after a campaign moved further along). Flip this back to true to re-lock it.
+    const ENFORCE_BACKWARD_LOCK = false;
+
     // Returns ALL stages/sub-statuses (grouped, in pipeline order) with a `locked` flag per
     // sub-status — locked = true when moving there would be backward movement (not allowed).
     // Dropped is never locked. Used so dropdowns show the full picture instead of hiding stages.
@@ -1969,7 +1973,7 @@
         group,
         subs: byGroup[group].map(sub => {
           const idx = map.findIndex(m => m.sub === sub && m.group === group);
-          const locked = group !== 'Dropped' && !(curIdx >= 0 && idx >= curIdx);
+          const locked = ENFORCE_BACKWARD_LOCK && group !== 'Dropped' && !(curIdx >= 0 && idx >= curIdx);
           return { sub, locked };
         })
       }));
