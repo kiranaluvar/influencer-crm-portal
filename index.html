@@ -646,6 +646,60 @@
     }
 
     // ===============================================================
+    // ADD CAMPAIGN (a second/additional campaign under an existing platform —
+    // e.g. a new collab/deliverable round with a creator who already has a platform on file)
+    // ===============================================================
+    function openAddCampaignModal(platform, profile, onSaved) {
+      const wrap = el('div', { class: 'space-y-3' });
+      const fields = {};
+
+      wrap.appendChild(el('div', { class: 'text-xs px-2 py-1.5 bg-stone-100 rounded-lg text-stone-700' },
+        `${profile.name} · ${platform.platform} @${platform.username}`
+      ));
+
+      fields.name = el('input', { type: 'text', placeholder: 'e.g. YTC deliverable, Round 2 collab…', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' });
+      wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-stone-600' }, 'Campaign name *'), fields.name));
+
+      const scrapingSub = (state.filterOptions?.sub_statuses || []).find(m => m.group === 'Scraping');
+      fields.sub_status = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' },
+        ...(state.filterOptions?.sub_statuses || []).map(m => el('option', { value: m.sub, selected: m.sub === scrapingSub?.sub }, `${m.sub}  (${m.group})`))
+      );
+      wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-stone-600' }, 'Starting stage'), fields.sub_status));
+
+      fields.owner_id = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' },
+        ...(state.filterOptions?.owners || []).map(o => el('option', { value: o.id, selected: o.id === state.me.user_id }, o.name || '—'))
+      );
+      wrap.appendChild(el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-stone-600' }, 'Owner *'), fields.owner_id));
+
+      const submitBtn = el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand' }, 'Create campaign');
+      submitBtn.addEventListener('click', async () => {
+        const name = fields.name.value.trim();
+        if (!name) return toast('Campaign name is required', 'error');
+        if (!fields.owner_id.value) return toast('Pick an owner', 'error');
+
+        submitBtn.disabled = true; submitBtn.textContent = 'Creating…';
+        const { error } = await supabase.from('campaigns').insert({
+          platform_id: platform.id,
+          name,
+          sub_status: fields.sub_status.value,
+          owner_id: fields.owner_id.value,
+        });
+        submitBtn.disabled = false; submitBtn.textContent = 'Create campaign';
+        if (error) return toast(error.message, 'error');
+
+        modal.close();
+        toast('New campaign created', 'success');
+        if (onSaved) await onSaved();
+      });
+
+      wrap.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-stone-200' },
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50', onClick: () => modal.close() }, 'Cancel'),
+        submitBtn
+      ));
+      const modal = renderModal('New campaign for this creator', wrap);
+    }
+
+    // ===============================================================
     // VIEWS — CAMPAIGNS LIST
     // ===============================================================
     function viewCampaigns() {
@@ -2813,6 +2867,8 @@
               ),
               el('div', { class: 'flex items-center gap-3' },
                 pl.link ? el('a', { href: pl.link, target: '_blank', class: 'text-xs text-brand hover:underline' }, 'Visit ↗') : null,
+                el('button', { class: 'text-xs text-brand hover:underline',
+                  onClick: () => openAddCampaignModal(pl, p, async () => { await fetchProfileDetail(p.id); render(); }) }, '+ New campaign'),
                 el('button', { class: 'text-xs text-stone-500 hover:text-stone-800 hover:underline',
                   onClick: () => openEditPlatformModal(pl, async () => { await fetchProfileDetail(p.id); render(); }) }, 'Edit')
               )
