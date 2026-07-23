@@ -394,15 +394,20 @@
       const from = (L.page - 1) * PAGE_SIZE;
       const to   = from + PAGE_SIZE - 1;
 
+      // Use an inner join on platforms only when filtering by platform, so profiles with
+      // zero platforms still show up normally the rest of the time.
+      const platformJoin = L.filters.platform ? 'platforms!inner' : 'platforms';
       let q = supabase.from('profiles').select(`
         id, name, email, phone, region, lead_type, created_at,
         owner:team_members!profiles_created_by_fkey ( full_name ),
-        platforms ( id, platform, username )
+        ${platformJoin} ( id, platform, username )
       `, { count: 'exact' });
 
       if (L.search) q = q.or(`name.ilike.%${L.search}%,email.ilike.%${L.search}%,phone.ilike.%${L.search}%`);
       if (L.filters.lead_type) q = q.eq('lead_type', L.filters.lead_type);
       if (L.filters.created_by) q = q.eq('created_by', L.filters.created_by);
+      if (L.filters.region) q = q.eq('region', L.filters.region);
+      if (L.filters.platform) q = q.eq('platforms.platform', L.filters.platform);
 
       q = q.order('created_at', { ascending: false }).range(from, to);
 
@@ -847,6 +852,18 @@
         el('option', { value: '' }, 'All owners'),
         ...(fo?.owners || []).map(o => el('option', { value: o.id, selected: L.filters.created_by === o.id }, o.name || '—'))
       );
+      const regionSel = el('select', { class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg bg-white',
+        onchange: e => { L.filters.region = e.target.value || undefined; L.page = 1; refresh('profiles'); }
+      },
+        el('option', { value: '' }, 'All countries'),
+        ...COUNTRIES.map(c => el('option', { value: c, selected: L.filters.region === c }, c))
+      );
+      const platSel = el('select', { class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg bg-white',
+        onchange: e => { L.filters.platform = e.target.value || undefined; L.page = 1; refresh('profiles'); }
+      },
+        el('option', { value: '' }, 'All platforms'),
+        ...(fo?.platforms || []).map(p => el('option', { value: p, selected: L.filters.platform === p }, p))
+      );
 
       const cols = 'minmax(0,32px) minmax(0,2fr) minmax(0,0.8fr) minmax(0,1.4fr) minmax(0,1.6fr) minmax(0,1fr) minmax(0,80px)';
       const headerRow = el('div', { class: 'hidden md:grid gap-3 items-center px-4 py-2.5 bg-stone-50 text-[10px] text-stone-500 uppercase tracking-wide font-medium border-b border-stone-200', style: `grid-template-columns:${cols};` },
@@ -895,7 +912,7 @@
         pageHeader('Influencer marketing', 'Profiles', `${L.total} influencers in your directory`,
           el('button', { class: 'px-3 py-2 text-sm rounded-lg btn-brand', onClick: openAddProfileModal }, '+ New profile')
         ),
-        el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' }, searchInp, ltSel, ownerSel),
+        el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' }, searchInp, ltSel, ownerSel, regionSel, platSel),
         table, pag
       );
     }
