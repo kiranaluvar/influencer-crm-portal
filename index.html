@@ -801,7 +801,7 @@
           (() => {
             const poc = c.platform?.imported_poc;
             const realOwner = c.owner?.full_name || '—';
-            if (poc && poc !== realOwner) {
+            if (poc && !pocIsResolved(poc, realOwner)) {
               return el('div', { class: 'text-[12px] truncate min-w-0', title: `POC pending migration · currently owned by ${realOwner}` },
                 el('span', { class: 'text-stone-700' }, poc),
                 el('span', { class: 'text-[10px] text-amber-600 ml-1' }, '· pending')
@@ -1153,7 +1153,7 @@
               (() => {
                 const poc = c.platform?.imported_poc;
                 const realOwner = c.owner?.full_name || '—';
-                if (poc && poc !== realOwner) {
+                if (poc && !pocIsResolved(poc, realOwner)) {
                   return el('span', { class: 'text-stone-700' }, poc, el('span', { class: 'text-[10px] text-amber-600 ml-1' }, '· pending'));
                 }
                 return el('span', { class: 'text-stone-500' }, realOwner);
@@ -2080,6 +2080,17 @@
       return data?.signedUrl || null;
     }
 
+    // Legacy `imported_poc` values only ever stored a first name (e.g. "Tushi"), never the full
+    // name — so comparing it against team_members.full_name ("Tushi Agarwal") with exact string
+    // equality would show "pending migration" forever even after the campaign is correctly
+    // reassigned to that exact person. Treat a first-name match as resolved.
+    function pocIsResolved(poc, ownerFullName) {
+      if (!poc || !ownerFullName) return false;
+      const p = poc.trim().toLowerCase();
+      const f = ownerFullName.trim().toLowerCase();
+      return f === p || f.split(/\s+/)[0] === p;
+    }
+
     function canEditCampaign(c) {
       if (!c || !state.me) return false;
       if (state.me.role === 'admin') return true;
@@ -2743,7 +2754,7 @@
           el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-stone-500 mb-2' }, 'Owner'),
           el('div', { class: 'text-sm' }, c.owner?.full_name || '—'),
           el('div', { class: 'text-xs text-stone-500 mt-1' }, c.owner?.email || ''),
-          pl.imported_poc && pl.imported_poc !== c.owner?.full_name
+          pl.imported_poc && !pocIsResolved(pl.imported_poc, c.owner?.full_name)
             ? el('div', { class: 'text-xs mt-2 pt-2 border-t border-stone-100' },
                 el('span', { class: 'text-stone-500' }, 'POC (pending migration): '),
                 el('span', { class: 'text-amber-700 font-medium' }, pl.imported_poc)
