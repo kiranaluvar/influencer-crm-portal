@@ -208,6 +208,40 @@
       );
     }
 
+    // Reusable multi-select filter — checkbox popover instead of a native single-select.
+    // Standard component for ALL filter dropdowns going forward (people always need to pick more than one).
+    // options: array of strings, or array of {value, label}. onChange receives the full array of selected values.
+    function multiSelectFilter(label, options, selected, onChange) {
+      const normOpts = options.map(o => typeof o === 'string' ? { value: o, label: o } : o);
+      const sel = new Set(selected || []);
+      const btn = el('button', { type: 'button', class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg bg-white hover:bg-stone-50 flex items-center gap-1.5 whitespace-nowrap' });
+      const caret = el('span', { class: 'text-stone-400 text-[10px]' }, '▾');
+      const btnLabel = el('span', {});
+      btn.appendChild(btnLabel); btn.appendChild(caret);
+      const renderLabel = () => { btnLabel.textContent = sel.size ? `${label} (${sel.size})` : `All ${label.toLowerCase()}`; };
+      renderLabel();
+
+      const panel = el('div', { class: 'ms-panel absolute z-20 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg p-1.5 max-h-64 overflow-y-auto hidden', style: 'min-width:200px;' });
+      normOpts.forEach(o => {
+        const cb = el('input', { type: 'checkbox', checked: sel.has(o.value), class: 'rounded border-stone-300 text-blue-600 focus:ring-blue-500' });
+        cb.addEventListener('change', () => {
+          if (cb.checked) sel.add(o.value); else sel.delete(o.value);
+          renderLabel();
+          onChange(Array.from(sel));
+        });
+        panel.appendChild(el('label', { class: 'flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-stone-50 rounded-lg cursor-pointer' }, cb, o.label));
+      });
+
+      const wrap = el('div', { class: 'relative inline-block' }, btn, panel);
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        $$('.ms-panel').forEach(p => { if (p !== panel) p.classList.add('hidden'); });
+        panel.classList.toggle('hidden');
+      });
+      document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) panel.classList.add('hidden'); });
+      return wrap;
+    }
+
     function pipelineStrip(counts, onClick) {
       // counts: array of { group, count } in canonical order
       const order = ['Scraping','Screening','Negotiation','Documents','Integration Planning','Gone Live','Post Gone Live','Dropped'];
@@ -346,10 +380,10 @@
       `;
 
       const applyFilters = (q) => {
-        if (L.filters.group_status) q = q.eq('group_status', L.filters.group_status);
-        if (L.filters.sub_status)   q = q.eq('sub_status', L.filters.sub_status);
-        if (L.filters.owner_id)     q = q.eq('owner_id', L.filters.owner_id);
-        if (L.filters.platform)     q = q.eq('platforms.platform', L.filters.platform);
+        if ((L.filters.group_status || []).length) q = q.in('group_status', L.filters.group_status);
+        if ((L.filters.sub_status || []).length)   q = q.in('sub_status', L.filters.sub_status);
+        if ((L.filters.owner_id || []).length)     q = q.in('owner_id', L.filters.owner_id);
+        if ((L.filters.platform || []).length)     q = q.in('platforms.platform', L.filters.platform);
         if (L.filters.date_from)    q = q.gte('created_at', L.filters.date_from);
         if (L.filters.date_to)      q = q.lte('created_at', L.filters.date_to + 'T23:59:59');
         return q;
@@ -396,7 +430,7 @@
 
       // Use an inner join on platforms only when filtering by platform, so profiles with
       // zero platforms still show up normally the rest of the time.
-      const platformJoin = L.filters.platform ? 'platforms!inner' : 'platforms';
+      const platformJoin = (L.filters.platform || []).length ? 'platforms!inner' : 'platforms';
       let q = supabase.from('profiles').select(`
         id, name, email, phone, region, lead_type, created_at,
         owner:team_members!profiles_created_by_fkey ( full_name ),
@@ -404,10 +438,10 @@
       `, { count: 'exact' });
 
       if (L.search) q = q.or(`name.ilike.%${L.search}%,email.ilike.%${L.search}%,phone.ilike.%${L.search}%`);
-      if (L.filters.lead_type) q = q.eq('lead_type', L.filters.lead_type);
-      if (L.filters.created_by) q = q.eq('created_by', L.filters.created_by);
-      if (L.filters.region) q = q.eq('region', L.filters.region);
-      if (L.filters.platform) q = q.eq('platforms.platform', L.filters.platform);
+      if ((L.filters.lead_type || []).length) q = q.in('lead_type', L.filters.lead_type);
+      if ((L.filters.created_by || []).length) q = q.in('created_by', L.filters.created_by);
+      if ((L.filters.region || []).length) q = q.in('region', L.filters.region);
+      if ((L.filters.platform || []).length) q = q.in('platforms.platform', L.filters.platform);
 
       q = q.order('created_at', { ascending: false }).range(from, to);
 
@@ -721,29 +755,21 @@
         oninput: debounce(e => { const v = e.target.value; if (v.length === 1) return; L.search = v; L.page = 1; refresh('campaigns'); }, 500)
       });
 
-      const groupSel = el('select', { class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg bg-white',
-        onchange: e => { L.filters.group_status = e.target.value || undefined; L.page = 1; refresh('campaigns'); }
-      },
-        el('option', { value: '' }, 'All stages'),
-        ...(fo?.group_statuses || []).map(g => el('option', { value: g, selected: L.filters.group_status === g }, g))
-      );
+      const groupSel = multiSelectFilter('Stages', fo?.group_statuses || [], L.filters.group_status, (vals) => {
+        L.filters.group_status = vals; L.page = 1; refresh('campaigns');
+      });
 
-      const ownerSel = el('select', { class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg bg-white',
-        onchange: e => { L.filters.owner_id = e.target.value || undefined; L.page = 1; refresh('campaigns'); }
-      },
-        el('option', { value: '' }, 'All owners'),
-        ...(fo?.owners || []).map(o => el('option', { value: o.id, selected: L.filters.owner_id === o.id }, o.name || '—'))
-      );
+      const ownerSel = multiSelectFilter('Owners', (fo?.owners || []).map(o => ({ value: o.id, label: o.name || '—' })), L.filters.owner_id, (vals) => {
+        L.filters.owner_id = vals; L.page = 1; refresh('campaigns');
+      });
 
-      const platSel = el('select', { class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg bg-white',
-        onchange: e => { L.filters.platform = e.target.value || undefined; L.page = 1; refresh('campaigns'); }
-      },
-        el('option', { value: '' }, 'All platforms'),
-        ...(fo?.platforms || []).map(p => el('option', { value: p, selected: L.filters.platform === p }, p))
-      );
+      const platSel = multiSelectFilter('Platforms', fo?.platforms || [], L.filters.platform, (vals) => {
+        L.filters.platform = vals; L.page = 1; refresh('campaigns');
+      });
 
       const strip = pipelineStrip(pipelineCounts, (g) => {
-        L.filters.group_status = L.filters.group_status === g ? undefined : g;
+        const cur = L.filters.group_status || [];
+        L.filters.group_status = cur.includes(g) ? cur.filter(x => x !== g) : [...cur, g];
         L.page = 1; refresh('campaigns');
       });
 
@@ -840,30 +866,18 @@
         class: 'flex-1 sm:flex-none sm:w-64 px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 bg-white',
         oninput: debounce(e => { const v = e.target.value; if (v.length === 1) return; L.search = v; L.page = 1; refresh('profiles'); }, 500)
       });
-      const ltSel = el('select', { class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg bg-white',
-        onchange: e => { L.filters.lead_type = e.target.value || undefined; L.page = 1; refresh('profiles'); }
-      },
-        el('option', { value: '' }, 'All lead types'),
-        ...(fo?.lead_types || []).map(t => el('option', { value: t, selected: L.filters.lead_type === t }, t))
-      );
-      const ownerSel = el('select', { class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg bg-white',
-        onchange: e => { L.filters.created_by = e.target.value || undefined; L.page = 1; refresh('profiles'); }
-      },
-        el('option', { value: '' }, 'All owners'),
-        ...(fo?.owners || []).map(o => el('option', { value: o.id, selected: L.filters.created_by === o.id }, o.name || '—'))
-      );
-      const regionSel = el('select', { class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg bg-white',
-        onchange: e => { L.filters.region = e.target.value || undefined; L.page = 1; refresh('profiles'); }
-      },
-        el('option', { value: '' }, 'All countries'),
-        ...COUNTRIES.map(c => el('option', { value: c, selected: L.filters.region === c }, c))
-      );
-      const platSel = el('select', { class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg bg-white',
-        onchange: e => { L.filters.platform = e.target.value || undefined; L.page = 1; refresh('profiles'); }
-      },
-        el('option', { value: '' }, 'All platforms'),
-        ...(fo?.platforms || []).map(p => el('option', { value: p, selected: L.filters.platform === p }, p))
-      );
+      const ltSel = multiSelectFilter('Lead types', fo?.lead_types || [], L.filters.lead_type, (vals) => {
+        L.filters.lead_type = vals; L.page = 1; refresh('profiles');
+      });
+      const ownerSel = multiSelectFilter('Owners', (fo?.owners || []).map(o => ({ value: o.id, label: o.name || '—' })), L.filters.created_by, (vals) => {
+        L.filters.created_by = vals; L.page = 1; refresh('profiles');
+      });
+      const regionSel = multiSelectFilter('Countries', COUNTRIES, L.filters.region, (vals) => {
+        L.filters.region = vals; L.page = 1; refresh('profiles');
+      });
+      const platSel = multiSelectFilter('Platforms', fo?.platforms || [], L.filters.platform, (vals) => {
+        L.filters.platform = vals; L.page = 1; refresh('profiles');
+      });
 
       const cols = 'minmax(0,32px) minmax(0,2fr) minmax(0,0.8fr) minmax(0,1.4fr) minmax(0,1.6fr) minmax(0,1fr) minmax(0,80px)';
       const headerRow = el('div', { class: 'hidden md:grid gap-3 items-center px-4 py-2.5 bg-stone-50 text-[10px] text-stone-500 uppercase tracking-wide font-medium border-b border-stone-200', style: `grid-template-columns:${cols};` },
