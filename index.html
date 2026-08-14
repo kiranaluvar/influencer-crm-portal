@@ -2678,6 +2678,46 @@
     }
 
     // ===============================================================
+    // DELETE (admin only)
+    // ===============================================================
+    async function deleteCampaign(c) {
+      if (state.me?.role !== 'admin') return toast('Only admins can delete', 'error');
+      const ok = await confirmModal(`Delete campaign "${c.name}" for ${c.platform?.profile?.name || 'this influencer'}? This also removes its activity log and change history. This cannot be undone.`);
+      if (!ok) return;
+      await supabase.from('campaign_activities').delete().eq('campaign_id', c.id);
+      await supabase.from('campaign_audit').delete().eq('campaign_id', c.id);
+      const { data, error } = await supabase.from('campaigns').delete().eq('id', c.id).select();
+      if (error) return toast(error.message, 'error');
+      if (!data || !data.length) return toast('Nothing was deleted — admins may need a DELETE policy in Supabase RLS', 'error');
+      toast('Campaign deleted', 'success');
+      window.location.hash = '#campaigns';
+    }
+
+    async function deleteProfile(p) {
+      if (state.me?.role !== 'admin') return toast('Only admins can delete', 'error');
+      const ok = await confirmModal(`Delete influencer "${p.name}" and ALL their platforms, campaigns, activity and history? This cannot be undone.`);
+      if (!ok) return;
+      const { data: platforms } = await supabase.from('platforms').select('id').eq('profile_id', p.id);
+      const platformIds = (platforms || []).map(x => x.id);
+      let campaignIds = [];
+      if (platformIds.length) {
+        const { data: camps } = await supabase.from('campaigns').select('id').in('platform_id', platformIds);
+        campaignIds = (camps || []).map(x => x.id);
+      }
+      if (campaignIds.length) {
+        await supabase.from('campaign_activities').delete().in('campaign_id', campaignIds);
+        await supabase.from('campaign_audit').delete().in('campaign_id', campaignIds);
+        await supabase.from('campaigns').delete().in('id', campaignIds);
+      }
+      if (platformIds.length) await supabase.from('platforms').delete().in('id', platformIds);
+      const { data, error } = await supabase.from('profiles').delete().eq('id', p.id).select();
+      if (error) return toast(error.message, 'error');
+      if (!data || !data.length) return toast('Nothing was deleted — admins may need a DELETE policy in Supabase RLS', 'error');
+      toast('Influencer deleted', 'success');
+      window.location.hash = '#profiles';
+    }
+
+    // ===============================================================
     // CAMPAIGN DETAIL VIEW
     // ===============================================================
     function viewCampaignDetail() {
@@ -2712,6 +2752,7 @@
           el('div', { class: 'flex flex-wrap gap-2' },
             canEdit ? el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand', onClick: () => openLogActivityModal(c) }, isTerminal ? '+ Log activity' : '+ Log activity / Update stage') : null,
             canEdit ? el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-stone-200 rounded-lg hover:bg-stone-50 text-stone-700', onClick: () => openReassignModal(c) }, 'Reassign') : null,
+            state.me?.role === 'admin' ? el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-rose-200 text-rose-600 rounded-lg hover:bg-rose-50', onClick: () => deleteCampaign(c) }, 'Delete campaign') : null,
           )
         )
       );
@@ -2719,7 +2760,10 @@
       // Side: profile + platform info
       const side = el('div', { class: 'space-y-3' },
         el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4' },
-          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-stone-500 mb-2' }, 'Influencer'),
+          el('div', { class: 'flex items-center justify-between mb-2' },
+            el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-stone-500' }, 'Influencer'),
+            canEdit ? el('button', { class: 'text-xs text-brand hover:underline', onClick: () => openEditProfileModal(p, async () => { await fetchCampaignDetail(c.id); render(); }) }, 'Edit') : null
+          ),
           el('div', { class: 'text-sm font-medium' }, el('a', { href: `#profiles/${p.id}`, class: 'hover:underline text-blue-600' }, p.name)),
           el('div', { class: 'mt-2 space-y-1 text-xs text-stone-600' },
             p.email ? el('div', {}, '✉ ', el('a', { href: `mailto:${p.email}`, class: 'text-brand hover:underline' }, p.email)) : null,
@@ -2734,7 +2778,10 @@
           )
         ),
         el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4' },
-          el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-stone-500 mb-2' }, 'Platform'),
+          el('div', { class: 'flex items-center justify-between mb-2' },
+            el('h3', { class: 'text-xs font-semibold uppercase tracking-wide text-stone-500' }, 'Platform'),
+            canEdit ? el('button', { class: 'text-xs text-brand hover:underline', onClick: () => openEditPlatformModal(pl, async () => { await fetchCampaignDetail(c.id); render(); }) }, 'Edit') : null
+          ),
           el('div', { class: 'text-sm font-medium' }, `${pl.platform} · @${pl.username}`),
           el('div', { class: 'mt-2 space-y-1 text-xs text-stone-600' },
             pl.link ? el('div', {}, '🔗 ', el('a', { href: pl.link, target: '_blank', class: 'text-brand hover:underline break-all' }, pl.link)) : null,
@@ -2872,7 +2919,9 @@
             el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-stone-200 rounded-lg hover:bg-stone-50 text-stone-700',
               onClick: () => openEditProfileModal(p, async () => { await fetchProfileDetail(p.id); render(); }) }, 'Edit profile'),
             el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand',
-              onClick: () => openAddPlatformModal(p) }, '+ Add platform')
+              onClick: () => openAddPlatformModal(p) }, '+ Add platform'),
+            state.me?.role === 'admin' ? el('button', { class: 'px-3 py-1.5 text-sm bg-white border border-rose-200 text-rose-600 rounded-lg hover:bg-rose-50',
+              onClick: () => deleteProfile(p) }, 'Delete') : null
           )
         )
       );
