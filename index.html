@@ -473,6 +473,14 @@
     // ===============================================================
     // ADD PROFILE FLOW
     // ===============================================================
+    // Email format check. Deliberately narrow: catches the typos actually seen in the wild
+    // (comma for dot, stray spaces, missing TLD) without trying to be RFC-complete.
+    function isValidEmail(v) {
+      const s = String(v || '').trim();
+      if (!s || /\s/.test(s)) return false;
+      return /^[^@,;:<>()\[\]\\"]+@[^@,;:\s]+\.[A-Za-z]{2,}$/.test(s);
+    }
+
     function openAddProfileModal() {
       const form = el('div', { class: 'space-y-3' });
       const fields = {};
@@ -579,6 +587,7 @@
         if (!profilePayload.name) return toast('Name is required', 'error');
         if (profilePayload.lead_type === 'Phone' && !profilePayload.phone) return toast('Phone is required for Phone lead', 'error');
         if (profilePayload.lead_type === 'Email' && !profilePayload.email) return toast('Email is required for Email lead', 'error');
+        if (profilePayload.email && !isValidEmail(profilePayload.email)) return toast("That email doesn't look valid — check for a comma instead of a dot", 'error');
         if (!platformPayload.platform) return toast('Platform is required (source of the lead)', 'error');
         if (!platformPayload.username) return toast('Platform username is required', 'error');
 
@@ -970,6 +979,8 @@
           region: fields.region.value || null, languages: checkedLangs.length ? checkedLangs : null, lead_type: fields.lead_type.value,
         };
         if (!payload.name) return toast('Name is required', 'error');
+        if (payload.lead_type === 'Email' && !payload.email) return toast('Email is required for Email lead', 'error');
+        if (payload.email && !isValidEmail(payload.email)) return toast("That email doesn't look valid — check for a comma instead of a dot", 'error');
         submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
         const { data, error } = await supabase.from('profiles').update(payload).eq('id', p.id).select();
         submitBtn.disabled = false; submitBtn.textContent = 'Save changes';
@@ -1950,6 +1961,9 @@
           };
           if (!profilePayload.name || !platformPayload.platform || !platformPayload.username) {
             fail++; errs.push(`Missing required fields: ${profilePayload.name || '?'}`); continue;
+          }
+          if (profilePayload.email && !isValidEmail(profilePayload.email)) {
+            fail++; errs.push(`${profilePayload.name}: invalid email "${profilePayload.email}"`); continue;
           }
           const { data: p, error: pe } = await supabase.from('profiles').insert(profilePayload).select().single();
           if (pe) { fail++; errs.push(`${profilePayload.name}: ${pe.message}`); continue; }
