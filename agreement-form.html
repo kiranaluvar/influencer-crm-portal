@@ -252,7 +252,10 @@ document.getElementById('btn-generate').addEventListener('click', async ()=>{
     const data = {
       name: fields.name.value.trim(),
       country: fields.country.value.trim(),
-      address: fields.address.value.trim(),
+      // A textarea address arrives with real newlines in it. Standard PDF fonts
+      // cannot encode 0x0A, and the address is rendered inline mid-sentence
+      // ("residing at ..."), so join the lines with commas rather than dropping them.
+      address: fields.address.value.trim().replace(/\s*\r?\n+\s*/g, ', ').replace(/,\s*,/g, ','),
       date: fmtDate(fields.date.value),
       fees: formatFees(fields.currency.value, fields.fees.value.trim()),
       email: fields.email.value.trim(),
@@ -355,7 +358,20 @@ async function buildAgreementPdf(data){
   // (e.g. ₹, emoji, many non-Latin scripts). Swap those out for a safe fallback
   // instead of letting a single character crash the whole generation.
   function sanitize(str){
-    return str.replace(/[^\x00-\x7E\u00A0-\u00FF\u20AC\u2018\u2019\u201C\u201D\u2013\u2014]/g, '?');
+    return String(str == null ? '' : str)
+      // Line breaks and tabs live inside the \x00-\x7E range the old filter kept, so
+      // they survived to drawText() and pdf-lib threw
+      // "WinAnsi cannot encode (0x000a)". Collapse them to spaces first.
+      .replace(/\r\n?|\n|\u2028|\u2029|\u0085/g, ' ')
+      .replace(/\t|\v|\f/g, ' ')
+      // Currency symbols WinAnsi has no glyph for - transliterate, do not blank out.
+      .replace(/\u20B9|\u20A8/g, 'Rs. ')
+      // Drop any remaining C0/C1 control characters outright.
+      .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
+      // Anything still outside what the standard PDF fonts encode becomes '?'.
+      .replace(/[^\x20-\x7E\u00A0-\u00FF\u20AC\u2018\u2019\u201C\u201D\u2013\u2014]/g, '?')
+      // Collapse runs of spaces the substitutions above may have created.
+      .replace(/ {2,}/g, ' ');
   }
 
   // runs: [{t:'text', b:bool, i:bool}]
@@ -407,8 +423,13 @@ async function buildAgreementPdf(data){
       if(centerPage){ x = (PAGE_W - lineW)/2; }
       line.forEach(w=>{
         const f = w.b ? bold : (w.i ? italic : font);
-        page.drawText(w.t, {x, y, size, font:f, color: w.b ? rgb(0.08,0.14,0.32) : rgb(0.12,0.12,0.14)});
-        x += f.widthOfTextAtSize(w.t, size);
+        // Final guard: a single unencodable character must never abort the whole
+        // document. sanitize() should have caught it, but skip rather than throw.
+        let t = w.t;
+        try { f.widthOfTextAtSize(t, size); }
+        catch(err){ console.warn('skipped unencodable token', JSON.stringify(t), err); return; }
+        page.drawText(t, {x, y, size, font:f, color: w.b ? rgb(0.08,0.14,0.32) : rgb(0.12,0.12,0.14)});
+        x += f.widthOfTextAtSize(t, size);
       });
       y -= lineGap;
     });
