@@ -762,6 +762,44 @@
         L.filters.platform = vals; L.page = 1; refresh('campaigns');
       });
 
+      // Country lives on the profile (campaigns -> platforms -> profiles), so this
+      // filters through the embedded relationship. Added because "USA creators at
+      // Scraping stage" was impossible to express: Campaigns had stage but no
+      // country, Profiles had country but no stage.
+      const regionSel = multiSelectFilter('Countries', COUNTRIES, L.filters.region, (vals) => {
+        L.filters.region = vals; L.page = 1; refresh('campaigns');
+      });
+
+      const subSel = multiSelectFilter('Sub-statuses',
+        (fo?.sub_statuses || []).map(m => ({ value: m.sub, label: `${m.sub} · ${m.group}` })),
+        L.filters.sub_status, (vals) => { L.filters.sub_status = vals; L.page = 1; refresh('campaigns'); });
+
+      const leadSel = multiSelectFilter('Lead types', fo?.lead_types || [], L.filters.lead_type, (vals) => {
+        L.filters.lead_type = vals; L.page = 1; refresh('campaigns');
+      });
+
+      const genreSel = multiSelectFilter('Genres', state.genreOptions || [], L.filters.genre, (vals) => {
+        L.filters.genre = vals; L.page = 1; refresh('campaigns');
+      });
+
+      const delivSel = multiSelectFilter('Deliverables', fo?.utm_content || [], L.filters.utm_content, (vals) => {
+        L.filters.utm_content = vals; L.page = 1; refresh('campaigns');
+      });
+
+      const rcbSel = triFilter('collab types', L.filters.is_recollab,
+        (v) => { L.filters.is_recollab = v; L.page = 1; refresh('campaigns'); }, 'Re-collab only', 'New only');
+
+      const emailSel = triFilter('emails', L.filters.has_email,
+        (v) => { L.filters.has_email = v; L.page = 1; refresh('campaigns'); }, 'Has email', 'No email');
+
+      const phoneSel = triFilter('phones', L.filters.has_phone,
+        (v) => { L.filters.has_phone = v; L.page = 1; refresh('campaigns'); }, 'Has phone', 'No phone');
+
+      const clearBtn = Object.values(L.filters).some(v => Array.isArray(v) ? v.length : v)
+        ? el('button', { class: 'px-2.5 py-2 text-xs text-stone-500 underline hover:text-stone-800',
+            onClick: () => { L.filters = {}; L.page = 1; refresh('campaigns'); } }, 'Clear filters')
+        : null;
+
       const strip = pipelineStrip(pipelineCounts, (g) => {
         const cur = L.filters.group_status || [];
         L.filters.group_status = cur.includes(g) ? cur.filter(x => x !== g) : [...cur, g];
@@ -844,7 +882,15 @@
         ),
         strip,
         // toolbar without the action buttons (moved to page header)
-        el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' }, searchInp, groupSel, ownerSel, platSel),
+        el('div', { class: 'flex flex-wrap gap-2 items-center mb-2' },
+          searchInp, groupSel, subSel, ownerSel, platSel, regionSel, leadSel, genreSel, delivSel),
+        el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' },
+          rcbSel, emailSel, phoneSel,
+          dateFilter('Added from', L.filters.date_from, (v) => { L.filters.date_from = v; L.page = 1; refresh('campaigns'); }),
+          dateFilter('to', L.filters.date_to, (v) => { L.filters.date_to = v; L.page = 1; refresh('campaigns'); }),
+          dateFilter('Live from', L.filters.live_from, (v) => { L.filters.live_from = v; L.page = 1; refresh('campaigns'); }),
+          dateFilter('to', L.filters.live_to, (v) => { L.filters.live_to = v; L.page = 1; refresh('campaigns'); }),
+          clearBtn),
         table, pag
       );
     }
@@ -873,6 +919,25 @@
       const platSel = multiSelectFilter('Platforms', fo?.platforms || [], L.filters.platform, (vals) => {
         L.filters.platform = vals; L.page = 1; refresh('profiles');
       });
+
+      const genreSel = multiSelectFilter('Genres', state.genreOptions || [], L.filters.genre, (vals) => {
+        L.filters.genre = vals; L.page = 1; refresh('profiles');
+      });
+
+      const langSel = multiSelectFilter('Languages', LANGUAGES, L.filters.languages, (vals) => {
+        L.filters.languages = vals; L.page = 1; refresh('profiles');
+      });
+
+      const emailSel = triFilter('emails', L.filters.has_email,
+        (v) => { L.filters.has_email = v; L.page = 1; refresh('profiles'); }, 'Has email', 'No email');
+
+      const phoneSel = triFilter('phones', L.filters.has_phone,
+        (v) => { L.filters.has_phone = v; L.page = 1; refresh('profiles'); }, 'Has phone', 'No phone');
+
+      const clearBtn = Object.values(L.filters).some(v => Array.isArray(v) ? v.length : v)
+        ? el('button', { class: 'px-2.5 py-2 text-xs text-stone-500 underline hover:text-stone-800',
+            onClick: () => { L.filters = {}; L.page = 1; refresh('profiles'); } }, 'Clear filters')
+        : null;
 
       const cols = 'minmax(0,32px) minmax(0,2fr) minmax(0,0.8fr) minmax(0,1.4fr) minmax(0,1.6fr) minmax(0,1fr) minmax(0,80px)';
       const headerRow = el('div', { class: 'hidden md:grid gap-3 items-center px-4 py-2.5 bg-stone-50 text-[10px] text-stone-500 uppercase tracking-wide font-medium border-b border-stone-200', style: `grid-template-columns:${cols};` },
@@ -922,7 +987,13 @@
           exportButton(exportProfilesCSV),
           el('button', { class: 'px-3 py-2 text-sm rounded-lg btn-brand', onClick: openAddProfileModal }, '+ New profile')
         ]),
-        el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' }, searchInp, ltSel, ownerSel, regionSel, platSel),
+        el('div', { class: 'flex flex-wrap gap-2 items-center mb-2' },
+          searchInp, ltSel, ownerSel, regionSel, platSel, genreSel, langSel),
+        el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' },
+          emailSel, phoneSel,
+          dateFilter('Added from', L.filters.date_from, (v) => { L.filters.date_from = v; L.page = 1; refresh('profiles'); }),
+          dateFilter('to', L.filters.date_to, (v) => { L.filters.date_to = v; L.page = 1; refresh('profiles'); }),
+          clearBtn),
         table, pag
       );
     }
@@ -1109,6 +1180,40 @@
 
     const listVal = (v) => Array.isArray(v) ? v.join('; ') : (v ?? '');
 
+    // ---- shared filter widgets ---------------------------------------------
+    // A labelled date input for range filters. Kept here so Campaigns and
+    // Profiles use the identical control.
+    function dateFilter(label, value, onChange) {
+      const inp = el('input', {
+        type: 'date', value: value || '',
+        class: 'px-2 py-1.5 text-sm border border-stone-200 rounded-lg bg-white'
+      });
+      inp.addEventListener('change', () => onChange(inp.value || null));
+      return el('label', { class: 'flex items-center gap-1.5 text-xs text-stone-500 whitespace-nowrap' }, label, inp);
+    }
+
+    // A yes/no/any tri-state, for booleans and has-a-thing questions.
+    function triFilter(label, value, onChange, yes = 'Yes', no = 'No') {
+      const sel = el('select', { class: 'px-2 py-2 text-sm border border-stone-200 rounded-lg bg-white' },
+        el('option', { value: '',    selected: !value },        `All ${label.toLowerCase()}`),
+        el('option', { value: 'yes', selected: value === 'yes' }, yes),
+        el('option', { value: 'no',  selected: value === 'no' },  no),
+      );
+      sel.addEventListener('change', () => onChange(sel.value || null));
+      return sel;
+    }
+
+    // Genre is free text on platforms (the genre-dropdown migration was never
+    // applied), so the option list is derived from the data itself, once per
+    // session, and cached alongside filterOptions.
+    async function loadGenreOptions() {
+      if (state.genreOptions) return state.genreOptions;
+      const { data, error } = await supabase.from('platforms').select('genre').not('genre', 'is', null).limit(5000);
+      if (error) { console.warn('genre options unavailable:', error.message); state.genreOptions = []; return state.genreOptions; }
+      state.genreOptions = [...new Set((data || []).map(r => String(r.genre).trim()).filter(Boolean))].sort();
+      return state.genreOptions;
+    }
+
     // ---- shared filter predicates -------------------------------------------
     function applyCampaignFilters(q) {
       const F = state.lists.campaigns.filters;
@@ -1116,8 +1221,20 @@
       if ((F.sub_status || []).length)   q = q.in('sub_status', F.sub_status);
       if ((F.owner_id || []).length)     q = q.in('owner_id', F.owner_id);
       if ((F.platform || []).length)     q = q.in('platforms.platform', F.platform);
+      // Country and lead type live on the profile, genre on the platform —
+      // reached through the embedded relationships.
+      if ((F.region || []).length)       q = q.in('platforms.profiles.region', F.region);
+      if ((F.lead_type || []).length)    q = q.in('platforms.profiles.lead_type', F.lead_type);
+      if ((F.genre || []).length)        q = q.in('platforms.genre', F.genre);
+      if ((F.utm_content || []).length)  q = q.in('utm_content', F.utm_content);
+      if (F.is_recollab === 'yes') q = q.eq('is_recollab', true);
+      if (F.is_recollab === 'no')  q = q.eq('is_recollab', false);
+      if (F.has_email === 'yes') q = q.not('platforms.profiles.email', 'is', null);
+      if (F.has_phone === 'yes') q = q.not('platforms.profiles.phone', 'is', null);
       if (F.date_from) q = q.gte('created_at', F.date_from);
       if (F.date_to)   q = q.lte('created_at', F.date_to + 'T23:59:59');
+      if (F.live_from) q = q.gte('gone_live_date', F.live_from);
+      if (F.live_to)   q = q.lte('gone_live_date', F.live_to);
       return q;
     }
 
@@ -1134,6 +1251,15 @@
       if ((F.created_by || []).length) q = q.in('created_by', F.created_by);
       if ((F.region || []).length)     q = q.in('region', F.region);
       if ((F.platform || []).length)   q = q.in('platforms.platform', F.platform);
+      if ((F.genre || []).length)      q = q.in('platforms.genre', F.genre);
+      // languages is a text[] — overlaps matches a profile speaking ANY picked language.
+      if ((F.languages || []).length)  q = q.overlaps('languages', F.languages);
+      if (F.has_email === 'yes') q = q.not('email', 'is', null);
+      if (F.has_email === 'no')  q = q.is('email', null);
+      if (F.has_phone === 'yes') q = q.not('phone', 'is', null);
+      if (F.has_phone === 'no')  q = q.is('phone', null);
+      if (F.date_from) q = q.gte('created_at', F.date_from);
+      if (F.date_to)   q = q.lte('created_at', F.date_to + 'T23:59:59');
       return q;
     }
 
@@ -1161,7 +1287,27 @@
     // ===============================================================
     // FOLLOW-UPS VIEW
     // ===============================================================
-    let followupsCache = { items: [], scope: 'mine' };
+    let followupsCache = { items: [], scope: 'mine', filters: {} };
+
+    // Follow-ups are fetched whole and bucketed in the browser, so filtering is
+    // client-side. Shared by the view AND exportFollowupsCSV so the download
+    // always matches the screen.
+    function filterFollowups(items) {
+      const F = followupsCache.filters || {};
+      const anyOf = (arr, v) => !(arr || []).length || (arr || []).includes(v);
+      return (items || []).filter(c =>
+        anyOf(F.group_status, c.group_status) &&
+        anyOf(F.sub_status,   c.sub_status) &&
+        anyOf(F.owner_id,     c.owner?.user_id) &&
+        anyOf(F.platform,     c.platform?.platform) &&
+        anyOf(F.region,       c.platform?.profile?.region) &&
+        anyOf(F.lead_type,    c.platform?.profile?.lead_type) &&
+        (F.has_phone !== 'yes' || !!c.platform?.profile?.phone) &&
+        (F.has_phone !== 'no'  || !c.platform?.profile?.phone) &&
+        (F.has_email !== 'yes' || !!c.platform?.profile?.email) &&
+        (F.has_email !== 'no'  || !c.platform?.profile?.email)
+      );
+    }
     async function fetchFollowups() {
       const scope = followupsCache.scope;
       let q = supabase.from('campaigns').select(`
@@ -1196,7 +1342,10 @@
     }
 
     function viewFollowups() {
-      const items = followupsCache.items;
+      const items = filterFollowups(followupsCache.items);
+      const fo = state.filterOptions;
+      const FF = followupsCache.filters;
+      const reFollow = () => { render(); };
       const now = new Date();
       const startOfDay = new Date(now); startOfDay.setHours(0,0,0,0);
       const endOfDay = new Date(now); endOfDay.setHours(23,59,59,999);
@@ -1261,9 +1410,33 @@
           kpi('Due this week', week.length, 'text-brand'),
           kpi('Later', later.length, 'text-stone-700'),
         ),
-        el('div', { class: 'flex gap-2 mb-4' },
+        el('div', { class: 'flex gap-2 mb-3' },
           scopeBtn('mine', 'My follow-ups'),
           (state.me?.role === 'tl' || state.me?.role === 'admin') ? scopeBtn('team', state.me?.role === 'admin' ? 'All' : 'My team') : null
+        ),
+        el('div', { class: 'flex flex-wrap gap-2 items-center mb-2' },
+          multiSelectFilter('Stages', fo?.group_statuses || [], FF.group_status,
+            (v) => { FF.group_status = v; reFollow(); }),
+          multiSelectFilter('Sub-statuses', (fo?.sub_statuses || []).map(m => ({ value: m.sub, label: `${m.sub} · ${m.group}` })), FF.sub_status,
+            (v) => { FF.sub_status = v; reFollow(); }),
+          multiSelectFilter('Owners', (fo?.owners || []).map(o => ({ value: o.id, label: o.name || '—' })), FF.owner_id,
+            (v) => { FF.owner_id = v; reFollow(); }),
+          multiSelectFilter('Platforms', fo?.platforms || [], FF.platform,
+            (v) => { FF.platform = v; reFollow(); }),
+          multiSelectFilter('Countries', COUNTRIES, FF.region,
+            (v) => { FF.region = v; reFollow(); }),
+          multiSelectFilter('Lead types', fo?.lead_types || [], FF.lead_type,
+            (v) => { FF.lead_type = v; reFollow(); }),
+        ),
+        el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' },
+          triFilter('phones', FF.has_phone, (v) => { FF.has_phone = v; reFollow(); }, 'Has phone', 'No phone'),
+          triFilter('emails', FF.has_email, (v) => { FF.has_email = v; reFollow(); }, 'Has email', 'No email'),
+          Object.values(FF).some(v => Array.isArray(v) ? v.length : v)
+            ? el('button', { class: 'px-2.5 py-2 text-xs text-stone-500 underline hover:text-stone-800',
+                onClick: () => { followupsCache.filters = {}; render(); } }, 'Clear filters')
+            : null,
+          el('span', { class: 'text-xs text-stone-400 ml-1' },
+            `${items.length} of ${followupsCache.items.length} shown`)
         ),
         section('Overdue', overdue, true),
         section('Due today', today, true),
@@ -1737,7 +1910,20 @@
     // ===============================================================
     // TEAM (admin)
     // ===============================================================
-    const teamState = { members: [], pocs: [] };
+    const teamState = { members: [], pocs: [], filters: {} };
+
+    // Team is a small, fully-loaded list, so filtering is client-side. Shared by
+    // the view and exportTeamCSV.
+    function filterTeamMembers(members) {
+      const F = teamState.filters || {};
+      const anyOf = (arr, v) => !(arr || []).length || (arr || []).includes(v);
+      return (members || []).filter(m =>
+        anyOf(F.role, m.role) &&
+        anyOf(F.team_lead_id, m.team_lead_id) &&
+        (F.is_active !== 'yes' || m.is_active === true) &&
+        (F.is_active !== 'no'  || m.is_active !== true)
+      );
+    }
     async function fetchTeam() {
       const [{ data, error }, { data: pocs }] = await Promise.all([
         supabase.from('team_members').select(`
@@ -1751,8 +1937,12 @@
     }
 
     function viewTeam() {
-      const m = teamState.members;
-      const tls = m.filter(x => x.role === 'tl' && x.is_active);
+      const allMembers = teamState.members;
+      const m = filterTeamMembers(allMembers);
+      const TF = teamState.filters;
+      // From ALL members, not the filtered list — otherwise filtering by role
+      // would empty the Team Lead assignment dropdowns in the table below.
+      const tls = allMembers.filter(x => x.role === 'tl' && x.is_active);
 
       const updateRole = async (uid, newRole) => {
         const { error } = await supabase.from('team_members').update({ role: newRole }).eq('user_id', uid);
@@ -1887,8 +2077,20 @@
       ) : null;
 
       return el('div', {},
-        pageHeader('Administration', 'Team', `${m.length} members · manage roles and team leads`,
+        pageHeader('Administration', 'Team',
+          `${m.length}${m.length !== allMembers.length ? ' of ' + allMembers.length : ''} members · manage roles and team leads`,
           exportButton(exportTeamCSV)),
+        el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' },
+          multiSelectFilter('Roles', ['admin', 'tl', 'user'], TF.role,
+            (v) => { TF.role = v; render(); }),
+          multiSelectFilter('Team leads', tls.map(t => ({ value: t.user_id, label: t.full_name || '—' })), TF.team_lead_id,
+            (v) => { TF.team_lead_id = v; render(); }),
+          triFilter('statuses', TF.is_active, (v) => { TF.is_active = v; render(); }, 'Active only', 'Inactive only'),
+          Object.values(TF).some(v => Array.isArray(v) ? v.length : v)
+            ? el('button', { class: 'px-2.5 py-2 text-xs text-stone-500 underline hover:text-stone-800',
+                onClick: () => { teamState.filters = {}; render(); } }, 'Clear filters')
+            : null
+        ),
         el('div', { class: 'bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 text-xs text-blue-900' },
           'Team members appear here after they sign in via Google for the first time. Then you can promote them to TL or admin, assign team leads, or deactivate.'
         ),
@@ -2080,7 +2282,7 @@
           spends_inr, gone_live_date,
           platform:platforms!inner ( platform, username, link, imported_poc,
             profile:profiles!inner ( name, email, phone, region, lead_type ) ),
-          owner:team_members!campaigns_owner_id_fkey ( full_name, email )
+          owner:team_members!campaigns_owner_id_fkey ( user_id, full_name, email )
         `)
           .not('next_followup_at', 'is', null)
           .not('group_status', 'in', '("Dropped","Post Gone Live")')
@@ -2089,6 +2291,9 @@
         if (scope === 'mine') q = q.eq('owner_id', state.me.user_id);
         return q;
       });
+
+      // Same client-side predicate the screen uses, so the download matches.
+      const filtered = filterFollowups(rows);
 
       const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
       const bucket = (d) => {
@@ -2100,7 +2305,7 @@
         return t <= wk ? 'Due this week' : 'Later';
       };
 
-      await runExport(`follow-ups-${scope}`, Promise.resolve(rows), [
+      await runExport(`follow-ups-${scope}`, Promise.resolve(filtered), [
         { label: 'Bucket',         value: r => bucket(r.next_followup_at) },
         { label: 'Due',            value: r => r.next_followup_at },
         { label: 'Note',           value: r => r.next_followup_note },
@@ -2128,14 +2333,15 @@
     // ---- Team ----------------------------------------------------------------
     async function exportTeamCSV() {
       const rows = await fetchAllPages(() => supabase.from('team_members').select(`
-        user_id, full_name, email, role, is_active, created_at,
+        user_id, full_name, email, role, is_active, created_at, team_lead_id,
         team_lead:team_lead_id ( full_name, email ),
         target:user_targets!user_targets_user_id_fkey ( daily_target )
       `).order('created_at', { ascending: true }));
 
       const target = (r) => Array.isArray(r.target) ? r.target[0]?.daily_target : r.target?.daily_target;
 
-      await runExport('team', Promise.resolve(rows), [
+      // Same client-side predicate the screen uses.
+      await runExport('team', Promise.resolve(filterTeamMembers(rows)), [
         { label: 'Name',            value: r => r.full_name },
         { label: 'Email',           value: r => r.email },
         { label: 'Role',            value: r => r.role },
@@ -3356,6 +3562,7 @@
       }
 
       await loadFilterOptions();
+      loadGenreOptions();   // fire-and-forget: genre list is derived from platforms data
       await refreshOverdueCount();
       parseRoute();
       if (state.routeParam && state.route === 'campaigns') await fetchCampaignDetail(state.routeParam);
