@@ -379,15 +379,8 @@
         owner:team_members!campaigns_owner_id_fkey ( full_name )
       `;
 
-      const applyFilters = (q) => {
-        if ((L.filters.group_status || []).length) q = q.in('group_status', L.filters.group_status);
-        if ((L.filters.sub_status || []).length)   q = q.in('sub_status', L.filters.sub_status);
-        if ((L.filters.owner_id || []).length)     q = q.in('owner_id', L.filters.owner_id);
-        if ((L.filters.platform || []).length)     q = q.in('platforms.platform', L.filters.platform);
-        if (L.filters.date_from)    q = q.gte('created_at', L.filters.date_from);
-        if (L.filters.date_to)      q = q.lte('created_at', L.filters.date_to + 'T23:59:59');
-        return q;
-      };
+      // Shared with exportCampaignsCSV — see the EXPORT ENGINE block.
+      const applyFilters = applyCampaignFilters;
 
       if (L.search) {
         // Multi-query merge: search by campaign name, platform username, influencer name in parallel
@@ -428,20 +421,13 @@
       const from = (L.page - 1) * PAGE_SIZE;
       const to   = from + PAGE_SIZE - 1;
 
-      // Use an inner join on platforms only when filtering by platform, so profiles with
-      // zero platforms still show up normally the rest of the time.
-      const platformJoin = (L.filters.platform || []).length ? 'platforms!inner' : 'platforms';
-      let q = supabase.from('profiles').select(`
+      // Filters and the platform join are shared with exportProfilesCSV — see the
+      // EXPORT ENGINE block — so the export always matches what is on screen.
+      let q = applyProfileFilters(supabase.from('profiles').select(`
         id, name, email, phone, region, lead_type, created_at,
         owner:team_members!profiles_created_by_fkey ( full_name ),
-        ${platformJoin} ( id, platform, username )
-      `, { count: 'exact' });
-
-      if (L.search) q = q.or(`name.ilike.%${L.search}%,email.ilike.%${L.search}%,phone.ilike.%${L.search}%`);
-      if ((L.filters.lead_type || []).length) q = q.in('lead_type', L.filters.lead_type);
-      if ((L.filters.created_by || []).length) q = q.in('created_by', L.filters.created_by);
-      if ((L.filters.region || []).length) q = q.in('region', L.filters.region);
-      if ((L.filters.platform || []).length) q = q.in('platforms.platform', L.filters.platform);
+        ${profilesPlatformJoin()} ( id, platform, username )
+      `, { count: 'exact' }));
 
       q = q.order('created_at', { ascending: false }).range(from, to);
 
@@ -851,7 +837,7 @@
           'Active campaigns',
           `Tracking ${L.total} campaigns across all platforms`,
           [
-            el('button', { class: 'px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg hover:bg-stone-50 text-stone-700', onClick: exportCampaignsCSV }, '⬇ Export'),
+            exportButton(exportCampaignsCSV),
             state.me?.role === 'admin' ? el('button', { class: 'px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg hover:bg-stone-50 text-stone-700', onClick: openImportCSVModal }, '⬆ Import') : null,
             el('button', { class: 'px-3 py-2 text-sm rounded-lg btn-brand', onClick: openAddProfileModal }, '+ New profile')
           ]
@@ -932,9 +918,10 @@
       );
 
       return el('div', {},
-        pageHeader('Influencer marketing', 'Profiles', `${L.total} influencers in your directory`,
+        pageHeader('Influencer marketing', 'Profiles', `${L.total} influencers in your directory`, [
+          exportButton(exportProfilesCSV),
           el('button', { class: 'px-3 py-2 text-sm rounded-lg btn-brand', onClick: openAddProfileModal }, '+ New profile')
-        ),
+        ]),
         el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' }, searchInp, ltSel, ownerSel, regionSel, platSel),
         table, pag
       );
@@ -1059,6 +1046,97 @@
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     }
+
+    // =========================================================================
+    // EXPORT ENGINE (admin only)
+    //
+    // Every list page exports the CURRENTLY FILTERED set, all columns, not just
+    // the page on screen. The filter predicates live in shared builders
+    // (applyCampaignFilters / applyProfileFilters) that BOTH the paginated fetch
+    // and the export call, so the two can never drift apart again.
+    //
+    // History: the old exportCampaignsCSV used .eq() against filter values that
+    // had since become arrays (multi-select conversion), and ignored the search
+    // box and date range entirely — so it silently exported the wrong rows.
+    // =========================================================================
+
+    // PostgREST caps a single response (1000 rows by default), so one .limit(5000)
+    // call does NOT reliably return everything. Page through instead.
+    const EXPORT_CHUNK = 1000;
+    const EXPORT_MAX   = 50000;   // hard stop so a runaway export can't hang the tab
+
+    function canExport() { return state.me?.role === 'admin'; }
+
+    function exportStamp() {
+      return new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    }
+
+    // buildQuery() must return a FRESH Supabase query each call — they are not reusable.
+    async function fetchAllPages(buildQuery) {
+      const out = [];
+      for (let offset = 0; offset < EXPORT_MAX; offset += EXPORT_CHUNK) {
+        const { data, error } = await buildQuery().range(offset, offset + EXPORT_CHUNK - 1);
+        if (error) throw new Error(error.message);
+        out.push(...(data || []));
+        if (!data || data.length < EXPORT_CHUNK) break;
+      }
+      return out;
+    }
+
+    async function runExport(name, rowsPromise, columns) {
+      const rows = await rowsPromise;
+      if (!rows.length) { toast('Nothing to export with the current filters', 'error'); return; }
+      downloadCSV(`${name}-${exportStamp()}.csv`, toCSV(rows, columns));
+      toast(`Exported ${rows.length} row${rows.length === 1 ? '' : 's'}`, 'success');
+    }
+
+    // Renders nothing at all for non-admins. Disables itself while running so a
+    // double-click cannot fire two exports.
+    function exportButton(handler, label = '\u2b07 Export') {
+      if (!canExport()) return null;
+      const btn = el('button', {
+        class: 'px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg hover:bg-stone-50 text-stone-700 disabled:opacity-50',
+        onClick: async () => {
+          const was = btn.textContent;
+          btn.disabled = true; btn.textContent = 'Exporting\u2026';
+          try { await handler(); }
+          catch (e) { console.error(e); toast('Export failed: ' + (e?.message ?? e), 'error'); }
+          finally { btn.disabled = false; btn.textContent = was; }
+        }
+      }, label);
+      return btn;
+    }
+
+    const listVal = (v) => Array.isArray(v) ? v.join('; ') : (v ?? '');
+
+    // ---- shared filter predicates -------------------------------------------
+    function applyCampaignFilters(q) {
+      const F = state.lists.campaigns.filters;
+      if ((F.group_status || []).length) q = q.in('group_status', F.group_status);
+      if ((F.sub_status || []).length)   q = q.in('sub_status', F.sub_status);
+      if ((F.owner_id || []).length)     q = q.in('owner_id', F.owner_id);
+      if ((F.platform || []).length)     q = q.in('platforms.platform', F.platform);
+      if (F.date_from) q = q.gte('created_at', F.date_from);
+      if (F.date_to)   q = q.lte('created_at', F.date_to + 'T23:59:59');
+      return q;
+    }
+
+    // profiles with zero platforms must still appear, so only switch to an inner
+    // join when the platform filter is actually in use.
+    function profilesPlatformJoin() {
+      return (state.lists.profiles.filters.platform || []).length ? 'platforms!inner' : 'platforms';
+    }
+
+    function applyProfileFilters(q) {
+      const L = state.lists.profiles, F = L.filters;
+      if (L.search) q = q.or(`name.ilike.%${L.search}%,email.ilike.%${L.search}%,phone.ilike.%${L.search}%`);
+      if ((F.lead_type || []).length)  q = q.in('lead_type', F.lead_type);
+      if ((F.created_by || []).length) q = q.in('created_by', F.created_by);
+      if ((F.region || []).length)     q = q.in('region', F.region);
+      if ((F.platform || []).length)   q = q.in('platforms.platform', F.platform);
+      return q;
+    }
+
     function parseCSV(text) {
       // Simple CSV parser supporting quoted fields with commas
       const rows = [];
@@ -1175,7 +1253,8 @@
       ) : null;
 
       return el('div', {},
-        pageHeader('Follow-ups', 'My pipeline', `${items.length} scheduled follow-ups`, null),
+        pageHeader('Follow-ups', 'My pipeline', `${items.length} scheduled follow-ups`,
+          exportButton(exportFollowupsCSV)),
         el('div', { class: 'grid grid-cols-2 md:grid-cols-4 gap-3 mb-5' },
           kpi('Overdue', overdue.length, 'text-rose-600'),
           kpi('Due today', today.length, 'text-amber-600'),
@@ -1808,7 +1887,8 @@
       ) : null;
 
       return el('div', {},
-        pageHeader('Administration', 'Team', `${m.length} members · manage roles and team leads`, null),
+        pageHeader('Administration', 'Team', `${m.length} members · manage roles and team leads`,
+          exportButton(exportTeamCSV)),
         el('div', { class: 'bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 text-xs text-blue-900' },
           'Team members appear here after they sign in via Google for the first time. Then you can promote them to TL or admin, assign team leads, or deactivate.'
         ),
@@ -1869,45 +1949,203 @@
     // ===============================================================
     // CSV EXPORT (campaigns) and IMPORT (profiles+platforms)
     // ===============================================================
+    // ---- Campaigns -----------------------------------------------------------
     async function exportCampaignsCSV() {
-      // Apply same filters but page through all
       const L = state.lists.campaigns;
-      let q = supabase.from('campaigns').select(`
-        id, name, sub_status, group_status, gone_live_date, spends_inr, utm_link, utm_content, is_recollab, rcb_count,
-        next_followup_at, updated_at, created_at,
-        platform:platforms!inner ( platform, username, profile:profiles!inner ( name, email, phone, region, lead_type ) ),
-        owner:team_members!campaigns_owner_id_fkey ( full_name )
-      `).limit(5000);
-      if (L.filters.group_status) q = q.eq('group_status', L.filters.group_status);
-      if (L.filters.sub_status)   q = q.eq('sub_status', L.filters.sub_status);
-      if (L.filters.owner_id)     q = q.eq('owner_id', L.filters.owner_id);
-      if (L.filters.platform)     q = q.eq('platforms.platform', L.filters.platform);
+      const sel = `
+        id, name, sub_status, group_status, gone_live_date, spends_inr,
+        utm_link, utm_medium, utm_content, is_recollab, rcb_count,
+        gone_live_link, insights, google_drive_link,
+        next_followup_at, next_followup_note, created_at, updated_at,
+        platform:platforms!inner ( platform, username, link, genre, avg_views, followers, imported_poc,
+          profile:profiles!inner ( name, email, phone, region, lead_type, languages ) ),
+        owner:team_members!campaigns_owner_id_fkey ( full_name, email )
+      `;
 
-      const { data, error } = await q.order('updated_at', { ascending: false });
-      if (error) { toast(error.message, 'error'); return; }
+      // The search box runs three parallel ilike queries and merges, exactly as
+      // fetchCampaigns does — otherwise a searched view would export unsearched rows.
+      const rows = L.search
+        ? await (async () => {
+            const s = L.search;
+            const mk = (col) => applyCampaignFilters(supabase.from('campaigns').select(sel))
+              .ilike(col, `%${s}%`).order('updated_at', { ascending: false }).limit(EXPORT_MAX);
+            const res = await Promise.all([
+              mk('name'), mk('platforms.username'), mk('platforms.profiles.name'),
+            ]);
+            const bad = res.find(r => r.error);
+            if (bad) throw new Error(bad.error.message);
+            const merged = new Map();
+            res.forEach(r => (r.data || []).forEach(x => merged.set(x.id, x)));
+            return Array.from(merged.values())
+              .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+          })()
+        : await fetchAllPages(() => applyCampaignFilters(supabase.from('campaigns').select(sel))
+            .order('updated_at', { ascending: false }));
 
-      const csv = toCSV(data || [], [
-        { label: 'Campaign',     value: r => r.name },
-        { label: 'Influencer',   value: r => r.platform?.profile?.name },
-        { label: 'Lead Type',    value: r => r.platform?.profile?.lead_type },
-        { label: 'Email',        value: r => r.platform?.profile?.email },
-        { label: 'Phone',        value: r => r.platform?.profile?.phone },
-        { label: 'Region',       value: r => r.platform?.profile?.region },
-        { label: 'Platform',     value: r => r.platform?.platform },
-        { label: 'Username',     value: r => r.platform?.username },
-        { label: 'Sub-status',   value: r => r.sub_status },
-        { label: 'Group Status', value: r => r.group_status },
-        { label: 'Owner',        value: r => r.owner?.full_name },
-        { label: 'Gone Live Date', value: r => r.gone_live_date },
-        { label: 'Spends (INR)', value: r => r.spends_inr },
-        { label: 'UTM Content',  value: r => r.utm_content },
-        { label: 'RCB?',         value: r => r.is_recollab },
-        { label: 'RCB Count',    value: r => r.rcb_count },
-        { label: 'Next Follow-up', value: r => r.next_followup_at },
-        { label: 'Updated',      value: r => r.updated_at },
+      await runExport('campaigns', Promise.resolve(rows), [
+        { label: 'Campaign Code',   value: r => r.name },
+        { label: 'Influencer',      value: r => r.platform?.profile?.name },
+        { label: 'Lead Type',       value: r => r.platform?.profile?.lead_type },
+        { label: 'Email',           value: r => r.platform?.profile?.email },
+        { label: 'Phone',           value: r => r.platform?.profile?.phone },
+        { label: 'Region',          value: r => r.platform?.profile?.region },
+        { label: 'Languages',       value: r => listVal(r.platform?.profile?.languages) },
+        { label: 'Platform',        value: r => r.platform?.platform },
+        { label: 'Username',        value: r => r.platform?.username },
+        { label: 'Profile Link',    value: r => r.platform?.link },
+        { label: 'Genre',           value: r => r.platform?.genre },
+        { label: 'Avg Views',       value: r => r.platform?.avg_views },
+        { label: 'Followers',       value: r => r.platform?.followers },
+        { label: 'Legacy POC',      value: r => r.platform?.imported_poc },
+        { label: 'Stage',           value: r => r.group_status },
+        { label: 'Sub-status',      value: r => r.sub_status },
+        { label: 'Owner',           value: r => r.owner?.full_name },
+        { label: 'Owner Email',     value: r => r.owner?.email },
+        { label: 'Next Follow-up',  value: r => r.next_followup_at },
+        { label: 'Follow-up Note',  value: r => r.next_followup_note },
+        { label: 'Gone Live Date',  value: r => r.gone_live_date },
+        { label: 'Spends (INR)',    value: r => r.spends_inr },
+        { label: 'Deliverable',     value: r => r.utm_content },
+        { label: 'Collab Type',     value: r => r.is_recollab ? 'RCB' : 'New' },
+        { label: 'RCB Count',       value: r => r.rcb_count },
+        { label: 'UTM Link',        value: r => r.utm_link },
+        { label: 'UTM Medium',      value: r => r.utm_medium },
+        { label: 'Gone Live Link',  value: r => r.gone_live_link },
+        { label: 'Insights',        value: r => r.insights },
+        { label: 'Drive Link',      value: r => r.google_drive_link },
+        { label: 'Created',         value: r => r.created_at },
+        { label: 'Updated',         value: r => r.updated_at },
       ]);
-      downloadCSV(`campaigns-${new Date().toISOString().slice(0,10)}.csv`, csv);
-      toast(`Exported ${(data || []).length} rows`, 'success');
+    }
+
+    // ---- Profiles ------------------------------------------------------------
+    async function exportProfilesCSV() {
+      const rows = await fetchAllPages(() => applyProfileFilters(supabase.from('profiles').select(`
+        id, name, email, phone, region, lead_type, languages, created_at,
+        owner:team_members!profiles_created_by_fkey ( full_name, email ),
+        ${profilesPlatformJoin()} ( platform, username, link, genre, avg_views, followers, imported_poc )
+      `)).order('created_at', { ascending: false }));
+
+      // Opt-out and drip state live in their own tables. Fetched separately and
+      // merged in memory, because an admin exporting contact details needs to see
+      // who has unsubscribed — the CRM screens do not show it yet.
+      const unsub = new Map();
+      const seq   = new Map();
+      try {
+        const [u, s] = await Promise.all([
+          supabase.from('unsubscribes').select('email, unsubscribed_at'),
+          supabase.from('outreach_sequence').select('profile_id, next_step, status, stop_reason, last_sent_at'),
+        ]);
+        (u.data || []).forEach(x => unsub.set(String(x.email).toLowerCase(), x));
+        (s.data || []).forEach(x => seq.set(x.profile_id, x));
+      } catch (e) {
+        console.warn('opt-out / sequence enrichment unavailable:', e);
+      }
+
+      const platformsOf = (r) => Array.isArray(r.platforms) ? r.platforms : (r.platforms ? [r.platforms] : []);
+
+      await runExport('profiles', Promise.resolve(rows), [
+        { label: 'Name',          value: r => r.name },
+        { label: 'Email',         value: r => r.email },
+        { label: 'Phone',         value: r => r.phone },
+        { label: 'Region',        value: r => r.region },
+        { label: 'Lead Type',     value: r => r.lead_type },
+        { label: 'Languages',     value: r => listVal(r.languages) },
+        { label: 'Added By',      value: r => r.owner?.full_name },
+        { label: 'Added By Email',value: r => r.owner?.email },
+        { label: 'Platform Count',value: r => platformsOf(r).length },
+        { label: 'Platforms',     value: r => platformsOf(r).map(p => p.platform).filter(Boolean).join('; ') },
+        { label: 'Usernames',     value: r => platformsOf(r).map(p => p.username).filter(Boolean).join('; ') },
+        { label: 'Profile Links', value: r => platformsOf(r).map(p => p.link).filter(Boolean).join('; ') },
+        { label: 'Genres',        value: r => platformsOf(r).map(p => p.genre).filter(Boolean).join('; ') },
+        { label: 'Followers',     value: r => platformsOf(r).map(p => p.followers).filter(v => v != null).join('; ') },
+        { label: 'Avg Views',     value: r => platformsOf(r).map(p => p.avg_views).filter(v => v != null).join('; ') },
+        { label: 'Legacy POC',    value: r => platformsOf(r).map(p => p.imported_poc).filter(Boolean).join('; ') },
+        { label: 'Unsubscribed',  value: r => unsub.has(String(r.email || '').toLowerCase()) ? 'YES' : '' },
+        { label: 'Unsubscribed At', value: r => unsub.get(String(r.email || '').toLowerCase())?.unsubscribed_at },
+        { label: 'Follow-ups Sent', value: r => { const s = seq.get(r.id); return s ? Math.max(s.next_step - 1, 0) : ''; } },
+        { label: 'Drip Status',   value: r => seq.get(r.id)?.status },
+        { label: 'Drip Stopped Because', value: r => seq.get(r.id)?.stop_reason },
+        { label: 'Last Outreach Sent',   value: r => seq.get(r.id)?.last_sent_at },
+        { label: 'Created',       value: r => r.created_at },
+      ]);
+    }
+
+    // ---- Follow-ups ----------------------------------------------------------
+    async function exportFollowupsCSV() {
+      const scope = followupsCache.scope;
+      const rows = await fetchAllPages(() => {
+        let q = supabase.from('campaigns').select(`
+          id, name, sub_status, group_status, next_followup_at, next_followup_note, updated_at, created_at,
+          spends_inr, gone_live_date,
+          platform:platforms!inner ( platform, username, link, imported_poc,
+            profile:profiles!inner ( name, email, phone, region, lead_type ) ),
+          owner:team_members!campaigns_owner_id_fkey ( full_name, email )
+        `)
+          .not('next_followup_at', 'is', null)
+          .not('group_status', 'in', '("Dropped","Post Gone Live")')
+          .order('next_followup_at', { ascending: true });
+        // Mirrors fetchFollowups: 'team'/'all' rely on RLS to scope the rows.
+        if (scope === 'mine') q = q.eq('owner_id', state.me.user_id);
+        return q;
+      });
+
+      const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+      const bucket = (d) => {
+        if (!d) return '';
+        const t = new Date(d);
+        if (t < startOfToday) return 'Overdue';
+        if (t.toDateString() === startOfToday.toDateString()) return 'Due today';
+        const wk = new Date(startOfToday); wk.setDate(wk.getDate() + 7);
+        return t <= wk ? 'Due this week' : 'Later';
+      };
+
+      await runExport(`follow-ups-${scope}`, Promise.resolve(rows), [
+        { label: 'Bucket',         value: r => bucket(r.next_followup_at) },
+        { label: 'Due',            value: r => r.next_followup_at },
+        { label: 'Note',           value: r => r.next_followup_note },
+        { label: 'Campaign Code',  value: r => r.name },
+        { label: 'Influencer',     value: r => r.platform?.profile?.name },
+        { label: 'Email',          value: r => r.platform?.profile?.email },
+        { label: 'Phone',          value: r => r.platform?.profile?.phone },
+        { label: 'Region',         value: r => r.platform?.profile?.region },
+        { label: 'Lead Type',      value: r => r.platform?.profile?.lead_type },
+        { label: 'Platform',       value: r => r.platform?.platform },
+        { label: 'Username',       value: r => r.platform?.username },
+        { label: 'Profile Link',   value: r => r.platform?.link },
+        { label: 'Stage',          value: r => r.group_status },
+        { label: 'Sub-status',     value: r => r.sub_status },
+        { label: 'Owner',          value: r => r.owner?.full_name },
+        { label: 'Owner Email',    value: r => r.owner?.email },
+        { label: 'Spends (INR)',   value: r => r.spends_inr },
+        { label: 'Gone Live Date', value: r => r.gone_live_date },
+        { label: 'Legacy POC',     value: r => r.platform?.imported_poc },
+        { label: 'Created',        value: r => r.created_at },
+        { label: 'Updated',        value: r => r.updated_at },
+      ]);
+    }
+
+    // ---- Team ----------------------------------------------------------------
+    async function exportTeamCSV() {
+      const rows = await fetchAllPages(() => supabase.from('team_members').select(`
+        user_id, full_name, email, role, is_active, created_at,
+        team_lead:team_lead_id ( full_name, email ),
+        target:user_targets!user_targets_user_id_fkey ( daily_target )
+      `).order('created_at', { ascending: true }));
+
+      const target = (r) => Array.isArray(r.target) ? r.target[0]?.daily_target : r.target?.daily_target;
+
+      await runExport('team', Promise.resolve(rows), [
+        { label: 'Name',            value: r => r.full_name },
+        { label: 'Email',           value: r => r.email },
+        { label: 'Role',            value: r => r.role },
+        { label: 'Active',          value: r => r.is_active ? 'Yes' : 'No' },
+        { label: 'Team Lead',       value: r => r.team_lead?.full_name },
+        { label: 'Team Lead Email', value: r => r.team_lead?.email },
+        { label: 'Daily Target',    value: r => target(r) ?? '' },
+        { label: 'Joined',          value: r => r.created_at },
+        { label: 'User ID',         value: r => r.user_id },
+      ]);
     }
 
     function openImportCSVModal() {
