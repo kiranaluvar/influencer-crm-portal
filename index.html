@@ -1655,12 +1655,13 @@
               if (error) return toast(error.message, 'error');
               if (!data || !data.length) return toast('No Gone Live campaigns in this range', 'error');
               const rows = data
-                .map(c => ({ utm_campaign: extractUtmCampaign(c.utm_link), spends: c.spends_inr }))
+                .map(c => ({ utm_campaign: extractUtmCampaign(c.utm_link), spends: c.spends_inr, date: c.gone_live_date }))
                 .filter(r => r.utm_campaign);
               downloadCSV(`utm-campaign-spends_${reportsState.from}_to_${reportsState.to}.csv`,
                 toCSV(rows, [
                   { label: 'UTM Campaign', value: 'utm_campaign' },
-                  { label: 'Spends (INR)', value: 'spends' }
+                  { label: 'Spends (INR)', value: 'spends' },
+                  { label: 'Gone Live Date', value: 'date' }
                 ]));
             } }, '⬇ UTM Campaign vs Spends (raw)')
         )
