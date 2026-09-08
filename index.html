@@ -383,7 +383,7 @@
 
       const sel = `
         id, name, sub_status, group_status, owner_id, next_followup_at, updated_at, created_at,
-        platform:platforms!inner ( id, platform, username, followers, imported_poc, profile:profiles!inner ( id, name, lead_type ) ),
+        platform:platforms!inner ( id, platform, username, followers, imported_poc, profile:profiles!inner ( id, name, email, phone, lead_type ) ),
         owner:team_members!campaigns_owner_id_fkey ( full_name )
       `;
 
@@ -392,25 +392,28 @@
         if ((L.filters.sub_status || []).length)   q = q.in('sub_status', L.filters.sub_status);
         if ((L.filters.owner_id || []).length)     q = q.in('owner_id', L.filters.owner_id);
         if ((L.filters.platform || []).length)     q = q.in('platforms.platform', L.filters.platform);
+        if ((L.filters.lead_type || []).length)    q = q.in('platforms.profiles.lead_type', L.filters.lead_type);
         if (L.filters.date_from)    q = q.gte('created_at', L.filters.date_from);
         if (L.filters.date_to)      q = q.lte('created_at', L.filters.date_to + 'T23:59:59');
         return q;
       };
 
       if (L.search) {
-        // Multi-query merge: search by campaign name, platform username, influencer name in parallel
+        // Multi-query merge: search across everything a person might type —
+        // campaign name, @username, influencer name, email, or phone.
         const s = L.search;
-        const [a, b, c] = await Promise.all([
+        const [a, b, c, d, e] = await Promise.all([
           applyFilters(supabase.from('campaigns').select(sel)).ilike('name', `%${s}%`).order('updated_at', { ascending: false }).limit(200),
           applyFilters(supabase.from('campaigns').select(sel)).ilike('platforms.username', `%${s}%`).order('updated_at', { ascending: false }).limit(200),
           applyFilters(supabase.from('campaigns').select(sel)).ilike('platforms.profiles.name', `%${s}%`).order('updated_at', { ascending: false }).limit(200),
+          applyFilters(supabase.from('campaigns').select(sel)).ilike('platforms.profiles.email', `%${s}%`).order('updated_at', { ascending: false }).limit(200),
+          applyFilters(supabase.from('campaigns').select(sel)).ilike('platforms.profiles.phone', `%${s}%`).order('updated_at', { ascending: false }).limit(200),
         ]);
-        if (a.error || b.error || c.error) {
-          const err = a.error || b.error || c.error;
-          console.error(err); toast(err.message, 'error'); return;
-        }
+        const results = [a, b, c, d, e];
+        const firstErr = results.find(r => r.error)?.error;
+        if (firstErr) { console.error(firstErr); toast(firstErr.message, 'error'); return; }
         const merged = new Map();
-        [a.data, b.data, c.data].forEach(arr => (arr || []).forEach(item => merged.set(item.id, item)));
+        results.forEach(r => (r.data || []).forEach(item => merged.set(item.id, item)));
         const all = Array.from(merged.values()).sort((x, y) => new Date(y.updated_at) - new Date(x.updated_at));
         L.total = all.length;
         L.items = all.slice(from, from + PAGE_SIZE);
@@ -758,13 +761,17 @@
       const pipelineCounts = state.pipelineCounts || [];
 
       // Toolbar
-      const searchInp = el('input', { type: 'search', placeholder: 'Search by campaign, influencer or @username…', value: L.search,
-        class: 'flex-1 sm:flex-none sm:w-64 px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 bg-white',
+      const searchInp = el('input', { type: 'search', placeholder: 'Search anything — campaign, influencer, @username, email or phone…', value: L.search,
+        class: 'flex-1 sm:flex-none sm:w-72 px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 bg-white',
         oninput: debounce(e => { const v = e.target.value; if (v.length === 1) return; L.search = v; L.page = 1; refresh('campaigns'); }, 500)
       });
 
       const groupSel = multiSelectFilter('Stages', fo?.group_statuses || [], L.filters.group_status, (vals) => {
         L.filters.group_status = vals; L.page = 1; refresh('campaigns');
+      });
+
+      const subSel = multiSelectFilter('Sub-stage', (fo?.sub_statuses || []).map(m => ({ value: m.sub, label: `${m.sub} (${m.group})` })), L.filters.sub_status, (vals) => {
+        L.filters.sub_status = vals; L.page = 1; refresh('campaigns');
       });
 
       const ownerSel = multiSelectFilter('Owners', (fo?.owners || []).map(o => ({ value: o.id, label: o.name || '—' })), L.filters.owner_id, (vals) => {
@@ -774,6 +781,31 @@
       const platSel = multiSelectFilter('Platforms', fo?.platforms || [], L.filters.platform, (vals) => {
         L.filters.platform = vals; L.page = 1; refresh('campaigns');
       });
+
+      const leadSel = multiSelectFilter('Lead type', fo?.lead_types || [], L.filters.lead_type, (vals) => {
+        L.filters.lead_type = vals; L.page = 1; refresh('campaigns');
+      });
+
+      const dateFromInp = el('input', { type: 'date', title: 'Created from', value: L.filters.date_from || '',
+        class: 'px-2 py-2 text-xs border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 bg-white',
+        onChange: (e) => { L.filters.date_from = e.target.value || null; L.page = 1; refresh('campaigns'); }
+      });
+      const dateToInp = el('input', { type: 'date', title: 'Created to', value: L.filters.date_to || '',
+        class: 'px-2 py-2 text-xs border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 bg-white',
+        onChange: (e) => { L.filters.date_to = e.target.value || null; L.page = 1; refresh('campaigns'); }
+      });
+
+      const activeFilterCount = ['group_status','sub_status','owner_id','platform','lead_type']
+        .reduce((n, k) => n + ((L.filters[k] || []).length ? 1 : 0), 0)
+        + (L.filters.date_from ? 1 : 0) + (L.filters.date_to ? 1 : 0);
+
+      const clearFiltersBtn = activeFilterCount ? el('button', {
+        class: 'px-2 py-2 text-xs text-stone-500 hover:text-rose-600 underline',
+        onClick: () => {
+          L.filters = { group_status: [], sub_status: [], owner_id: [], platform: [], lead_type: [], date_from: null, date_to: null };
+          L.search = ''; L.page = 1; refresh('campaigns');
+        }
+      }, `Clear ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'}`) : null;
 
       const strip = pipelineStrip(pipelineCounts, (g) => {
         const cur = L.filters.group_status || [];
@@ -857,7 +889,14 @@
         ),
         strip,
         // toolbar without the action buttons (moved to page header)
-        el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' }, searchInp, groupSel, ownerSel, platSel),
+        el('div', { class: 'flex flex-wrap gap-2 items-center mb-4' },
+          searchInp, groupSel, subSel, ownerSel, platSel, leadSel,
+          el('div', { class: 'flex items-center gap-1' },
+            el('span', { class: 'text-[10px] text-stone-400' }, 'Created'),
+            dateFromInp, el('span', { class: 'text-[10px] text-stone-400' }, '–'), dateToInp
+          ),
+          clearFiltersBtn
+        ),
         table, pag
       );
     }
