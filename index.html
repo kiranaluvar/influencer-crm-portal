@@ -1198,21 +1198,57 @@
     // (status = 'stopped_error', e.g. two consecutive GMass failures) so an agent
     // can see exactly where a lead's drip got stuck and resume it with one click,
     // instead of someone running SQL in Supabase by hand.
-    let outreachCache = { items: [] };
+    let outreachCache = { items: [], warnings: [], today: [] };
 
     async function fetchOutreachIssues() {
+      // Deliberately NOT using an embedded `profile:profiles(...)` select here.
+      // PostgREST can behave like an inner join on embeds — if a profile_id doesn't
+      // cleanly resolve, the whole outreach_sequence row can silently disappear from
+      // the results instead of just showing a blank name. Fetching profiles separately
+      // means a bad/missing match can never cause a genuinely-stuck row to vanish.
       const { data, error } = await supabase
         .from('outreach_sequence')
-        .select(`
-          profile_id, email, next_step, status, error_count, stop_reason, last_sent_at, locked_at,
-          profile:profiles ( id, name, lead_type )
-        `)
+        .select('profile_id, email, next_step, status, error_count, stop_reason, last_sent_at, locked_at')
         .eq('status', 'stopped_error')
         .order('last_sent_at', { ascending: false })
         .limit(500);
 
       if (error) { toast(error.message, 'error'); outreachCache.items = []; return; }
-      outreachCache.items = data || [];
+
+      const rows = data || [];
+      const ids = [...new Set(rows.map(r => r.profile_id).filter(Boolean))];
+      let namesById = {};
+      if (ids.length) {
+        const { data: profs, error: pErr } = await supabase.from('profiles').select('id, name').in('id', ids);
+        if (pErr) console.error('profile name lookup failed:', pErr.message);
+        else namesById = Object.fromEntries((profs || []).map(p => [p.id, p.name]));
+      }
+      outreachCache.items = rows.map(r => ({ ...r, profile: { name: namesById[r.profile_id] || null } }));
+
+      // Also surface rows that have failed ONCE but haven't been permanently stopped yet
+      // (the automation only stops a sequence after two consecutive failures, so these
+      // are still 'active' and will retry on the next cron tick — visibility only, no
+      // action needed unless they later show up above as fully stopped).
+      const { data: warnRows, error: wErr } = await supabase
+        .from('outreach_sequence')
+        .select('profile_id, email, next_step, status, error_count, last_sent_at')
+        .eq('status', 'active')
+        .gt('error_count', 0)
+        .order('last_sent_at', { ascending: false })
+        .limit(500);
+      if (wErr) { console.error('warning rows fetch failed:', wErr.message); outreachCache.warnings = []; return; }
+      const wIds = [...new Set((warnRows || []).map(r => r.profile_id).filter(Boolean))];
+      let wNamesById = {};
+      if (wIds.length) {
+        const { data: wProfs } = await supabase.from('profiles').select('id, name').in('id', wIds);
+        wNamesById = Object.fromEntries((wProfs || []).map(p => [p.id, p.name]));
+      }
+      outreachCache.warnings = (warnRows || []).map(r => ({ ...r, profile: { name: wNamesById[r.profile_id] || null } }));
+
+      // Today's expected-vs-sent scorecard (welcome email + each follow-up step).
+      const { data: todayData, error: todayErr } = await supabase.rpc('outreach_today_summary');
+      if (todayErr) { console.error('today summary fetch failed:', todayErr.message); outreachCache.today = []; }
+      else outreachCache.today = todayData || [];
     }
 
     // Resets one stuck row back to 'active' and backdates last_sent_at so the next
@@ -1265,6 +1301,26 @@
 
     function viewOutreachIssues() {
       const items = outreachCache.items;
+      const warnings = outreachCache.warnings || [];
+      const today = outreachCache.today || [];
+
+      const todayRow = (r) => {
+        const pct = r.expected > 0 ? Math.min(100, Math.round((r.sent / r.expected) * 100)) : (r.expected === 0 ? 100 : 0);
+        const barColor = r.pending > 0 ? (pct < 50 ? 'bg-rose-500' : 'bg-amber-500') : 'bg-emerald-500';
+        return el('div', { class: 'px-4 py-3 grid grid-cols-12 gap-2 items-center border-b border-stone-100 last:border-0' },
+          el('div', { class: 'col-span-12 md:col-span-3 text-sm font-medium' }, r.label),
+          el('div', { class: 'col-span-4 md:col-span-2 text-xs text-stone-600' }, `Expected: ${r.expected}`),
+          el('div', { class: 'col-span-4 md:col-span-2 text-xs text-stone-600' }, `Sent: ${r.sent}`),
+          el('div', { class: 'col-span-4 md:col-span-2 text-xs font-medium', style: r.pending > 0 ? 'color:#b45309' : 'color:#059669' },
+            r.pending > 0 ? `${r.pending} remaining` : 'All caught up'
+          ),
+          el('div', { class: 'col-span-12 md:col-span-3' },
+            el('div', { class: 'h-1.5 w-full bg-stone-100 rounded-full overflow-hidden' },
+              el('div', { class: `h-full ${barColor}`, style: `width:${pct}%` })
+            )
+          )
+        );
+      };
 
       const row = (r) => el('div', { class: 'px-4 py-3 hover:bg-stone-50 grid grid-cols-12 gap-2 items-center border-b border-stone-100 last:border-0' },
         el('div', { class: 'col-span-12 md:col-span-3' },
@@ -1285,22 +1341,47 @@
         )
       );
 
+      const warnRow = (r) => el('div', { class: 'px-4 py-2.5 hover:bg-stone-50 grid grid-cols-12 gap-2 items-center border-b border-stone-100 last:border-0' },
+        el('div', { class: 'col-span-12 md:col-span-4' },
+          el('div', { class: 'text-sm font-medium truncate' }, r.profile?.name || '—'),
+          el('div', { class: 'text-xs text-stone-500 truncate' }, r.email)
+        ),
+        el('div', { class: 'col-span-6 md:col-span-3 text-xs text-stone-600' }, `Step ${r.next_step} · 1 failed attempt`),
+        el('div', { class: 'col-span-6 md:col-span-5 text-xs text-amber-600' }, `Will retry automatically — last attempt ${relativeTime(r.last_sent_at)}`)
+      );
+
       return el('div', {},
-        pageHeader(
-          'Automation',
-          'Stuck Sequences',
-          `${items.length} welcome/follow-up email${items.length === 1 ? '' : 's'} stopped after repeated send errors`,
+        pageHeader('Automation', 'Outreach Health', 'Today\'s send progress, plus anything the automation gave up on', null),
+
+        el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden mb-5' },
+          el('div', { class: 'px-4 py-2 border-b border-stone-200 bg-stone-50 flex items-center justify-between' },
+            el('div', { class: 'text-xs font-semibold text-stone-500 uppercase tracking-wide' }, "Today's sends (IST day, updates live)"),
+            el('button', { class: 'text-xs text-brand font-medium', onClick: async () => { await fetchOutreachIssues(); render(); } }, 'Refresh')
+          ),
+          !today.length
+            ? el('div', { class: 'px-4 py-6 text-center text-sm text-stone-500' }, 'No data yet.')
+            : el('div', {}, ...today.map(todayRow))
+        ),
+
+        el('div', { class: 'flex items-center justify-between mb-3' },
+          el('h2', { class: 'text-sm font-semibold text-stone-700' }, `Stopped on error (${items.length})`),
           items.length ? el('button', {
             class: 'px-3 py-1.5 text-sm font-medium rounded-lg btn-brand',
             onClick: resumeAllOutreach
           }, `Resume all ${items.length}`) : null
         ),
         !items.length
-          ? el('div', { class: 'bg-white border border-dashed border-stone-300 rounded-xl p-10 text-center text-sm text-stone-500' }, 'Nothing stuck right now — all sequences are sending normally.')
-          : el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden' },
-              el('div', { class: 'px-4 py-2 border-b border-stone-200 bg-stone-50 text-xs font-semibold text-stone-500 uppercase tracking-wide' }, 'Stopped on error'),
+          ? el('div', { class: 'bg-white border border-dashed border-stone-300 rounded-xl p-10 text-center text-sm text-stone-500' }, 'Nothing fully stopped right now.')
+          : el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden mb-5' },
+              el('div', { class: 'px-4 py-2 border-b border-stone-200 bg-stone-50 text-xs font-semibold text-stone-500 uppercase tracking-wide' }, 'Stopped on error — needs Resume'),
               el('div', {}, ...items.map(row))
-            )
+            ),
+        warnings.length ? el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden' },
+          el('div', { class: 'px-4 py-2 border-b border-stone-200 bg-amber-50 text-xs font-semibold text-amber-700 uppercase tracking-wide' },
+            `${warnings.length} failed once — will auto-retry (no action needed unless they show up above)`
+          ),
+          el('div', {}, ...warnings.map(warnRow))
+        ) : null
       );
     }
 
@@ -3117,7 +3198,7 @@
       campaigns: { label: 'Campaigns', icon: '🎯', view: viewCampaigns, prefetch: fetchCampaigns },
       profiles:  { label: 'Profiles',  icon: '👤', view: viewProfiles,  prefetch: fetchProfiles },
       followups: { label: 'Follow-ups', icon: '⏰', view: viewFollowups, prefetch: fetchFollowups },
-      outreach:  { label: 'Stuck Sequences', icon: '🛑', view: viewOutreachIssues, prefetch: fetchOutreachIssues },
+      outreach:  { label: 'Outreach Health', icon: '🛑', view: viewOutreachIssues, prefetch: fetchOutreachIssues },
       agreement: { label: 'Agreement Form', icon: '📄', view: viewAgreementForm },
       reports:   { label: 'Reports',    icon: '📈', view: viewReports,   prefetch: fetchReports, adminOnly: true },
       team:      { label: 'Team',       icon: '👥', view: viewTeam,      prefetch: fetchTeam,    adminOnly: true },
