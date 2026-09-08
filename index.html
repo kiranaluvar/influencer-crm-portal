@@ -382,7 +382,7 @@
       const to   = from + PAGE_SIZE - 1;
 
       const sel = `
-        id, name, sub_status, group_status, owner_id, next_followup_at, updated_at, created_at,
+        id, name, sub_status, group_status, owner_id, next_followup_at, updated_at, created_at, utm_link,
         platform:platforms!inner ( id, platform, username, followers, imported_poc, profile:profiles!inner ( id, name, email, phone, lead_type ) ),
         owner:team_members!campaigns_owner_id_fkey ( full_name )
       `;
@@ -400,16 +400,19 @@
 
       if (L.search) {
         // Multi-query merge: search across everything a person might type —
-        // campaign name, @username, influencer name, email, or phone.
+        // campaign name, @username, influencer name, email, phone, or the UTM link
+        // (agents often paste/search a fragment of the utm_campaign value, which lives
+        // inside this URL string rather than any of the influencer's own fields).
         const s = L.search;
-        const [a, b, c, d, e] = await Promise.all([
+        const [a, b, c, d, e, f] = await Promise.all([
           applyFilters(supabase.from('campaigns').select(sel)).ilike('name', `%${s}%`).order('updated_at', { ascending: false }).limit(200),
           applyFilters(supabase.from('campaigns').select(sel)).ilike('platforms.username', `%${s}%`).order('updated_at', { ascending: false }).limit(200),
           applyFilters(supabase.from('campaigns').select(sel)).ilike('platforms.profiles.name', `%${s}%`).order('updated_at', { ascending: false }).limit(200),
           applyFilters(supabase.from('campaigns').select(sel)).ilike('platforms.profiles.email', `%${s}%`).order('updated_at', { ascending: false }).limit(200),
           applyFilters(supabase.from('campaigns').select(sel)).ilike('platforms.profiles.phone', `%${s}%`).order('updated_at', { ascending: false }).limit(200),
+          applyFilters(supabase.from('campaigns').select(sel)).ilike('utm_link', `%${s}%`).order('updated_at', { ascending: false }).limit(200),
         ]);
-        const results = [a, b, c, d, e];
+        const results = [a, b, c, d, e, f];
         const firstErr = results.find(r => r.error)?.error;
         if (firstErr) { console.error(firstErr); toast(firstErr.message, 'error'); return; }
         const merged = new Map();
@@ -761,7 +764,7 @@
       const pipelineCounts = state.pipelineCounts || [];
 
       // Toolbar
-      const searchInp = el('input', { type: 'search', placeholder: 'Search anything — campaign, influencer, @username, email or phone…', value: L.search,
+      const searchInp = el('input', { type: 'search', placeholder: 'Search anything — name, @username, email, phone or UTM link…', value: L.search,
         class: 'flex-1 sm:flex-none sm:w-72 px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 bg-white',
         oninput: debounce(e => { const v = e.target.value; if (v.length === 1) return; L.search = v; L.page = 1; refresh('campaigns'); }, 500)
       });
