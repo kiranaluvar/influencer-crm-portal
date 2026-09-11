@@ -73,7 +73,6 @@
     const PAGE_SIZE = 25;
 
     const LANGUAGES = ['Hindi','English','Tamil','Telugu','Kannada','Malayalam','Marathi','Gujarati','Bengali','Punjabi','Urdu'];
-    const GENRES = ['Lifestyle','Parenting','Travel','Infotainment','Cooking','Nutrition','Fitness','Gardening','DIY/ Home Improvement'];
 
     const COUNTRIES = ['Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina','Armenia','Australia','Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Benin','Bhutan','Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cabo Verde','Cambodia','Cameroon','Canada','Central African Republic','Chad','Chile','China','Colombia','Comoros','Congo','Costa Rica','Croatia','Cuba','Cyprus','Czech Republic','Denmark','Djibouti','Dominica','Dominican Republic','DR Congo','Ecuador','Egypt','El Salvador','Equatorial Guinea','Eritrea','Estonia','Eswatini','Ethiopia','Fiji','Finland','France','Gabon','Gambia','Georgia','Germany','Ghana','Greece','Grenada','Guatemala','Guinea','Guinea-Bissau','Guyana','Haiti','Honduras','Hungary','Iceland','India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Ivory Coast','Jamaica','Japan','Jordan','Kazakhstan','Kenya','Kiribati','Kosovo','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon','Lesotho','Liberia','Libya','Liechtenstein','Lithuania','Luxembourg','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Marshall Islands','Mauritania','Mauritius','Mexico','Micronesia','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nauru','Nepal','Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Korea','North Macedonia','Norway','Oman','Pakistan','Palau','Palestine','Panama','Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Romania','Russia','Rwanda','Saint Kitts and Nevis','Saint Lucia','Saint Vincent and the Grenadines','Samoa','San Marino','Sao Tome and Principe','Saudi Arabia','Senegal','Serbia','Seychelles','Sierra Leone','Singapore','Slovakia','Slovenia','Solomon Islands','Somalia','South Africa','South Korea','South Sudan','Spain','Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan','Tanzania','Thailand','Timor-Leste','Togo','Tonga','Trinidad and Tobago','Tunisia','Turkey','Turkmenistan','Tuvalu','Uganda','Ukraine','United Arab Emirates','United Kingdom','United States','Uruguay','Uzbekistan','Vanuatu','Vatican City','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe'];
 
@@ -535,7 +534,7 @@
       );
       const usernameWrap = mkField('Username *', 'username');
       const linkWrap     = mkField('Profile Link', 'link', 'url');
-      const genreWrap    = mkSelect('Genre', 'genre', GENRES);
+      const genreWrap    = mkField('Genre', 'genre');
       const avgViewsWrap = mkField('Avg Views (last 10 collabs)', 'avg_views', 'number');
       const followersWrap = mkField('Followers', 'followers', 'number');
 
@@ -647,15 +646,7 @@
       ));
       form.appendChild(mkField('Username *', 'username'));
       form.appendChild(mkField('Profile Link', 'link', 'url'));
-      const genreSel = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' },
-        el('option', { value: '' }, '— Select —'),
-        ...GENRES.map(g => el('option', { value: g }, g))
-      );
-      fields.genre = genreSel;
-      form.appendChild(el('label', { class: 'block' },
-        el('span', { class: 'text-xs font-medium text-stone-600' }, 'Genre'),
-        genreSel
-      ));
+      form.appendChild(mkField('Genre', 'genre'));
       form.appendChild(mkField('Avg Views (last 10 collabs)', 'avg_views', 'number'));
       form.appendChild(mkField('Followers', 'followers', 'number'));
 
@@ -1001,10 +992,7 @@
       const wrap = el('div', { class: 'space-y-3' });
       fields.username  = el('input', { type: 'text', value: pl.username || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' });
       fields.link      = el('input', { type: 'url', value: pl.link || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' });
-      fields.genre     = el('select', { class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' },
-        el('option', { value: '' }, '— Select —'),
-        ...GENRES.map(g => el('option', { value: g, selected: pl.genre === g }, g))
-      );
+      fields.genre     = el('input', { type: 'text', value: pl.genre || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' });
       fields.avg_views = el('input', { type: 'number', value: pl.avg_views || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' });
       fields.followers = el('input', { type: 'number', value: pl.followers || '', class: 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400' });
       const mk = (label, inp) => el('label', { class: 'block' }, el('span', { class: 'text-xs font-medium text-stone-600' }, label), inp);
@@ -1654,6 +1642,104 @@
         pageHeader('Insights', 'Reports', 'Activity and performance over a custom date range', null),
         dateBar, exportCard, hourlyCard, goneLiveCard, targetCard, agentDaily, matrixCard, l2eCard, dropCard
       );
+    }
+
+    // ===============================================================
+    // MY REACH-OUT (non-admin — scoped personal view of the same
+    // reachout_target_report RPC used by Reports, filtered client-side
+    // to the signed-in user's own row as defense-in-depth)
+    // ===============================================================
+    const myReachoutState = { from: null, to: null, targets: null };
+    async function fetchMyReachout() {
+      if (!myReachoutState.from) {
+        const t = new Date(); const f = new Date(t); f.setDate(f.getDate() - 29);
+        myReachoutState.to = t.toISOString().slice(0, 10);
+        myReachoutState.from = f.toISOString().slice(0, 10);
+      }
+      const { data: tg, error } = await supabase.rpc('reachout_target_report', { d_from: myReachoutState.from, d_to: myReachoutState.to });
+      if (error) { toast(error.message, 'error'); return; }
+      const myId = state.me?.user_id;
+      // NOTE: this filter only protects the UI. If the RPC itself returns every
+      // agent's rows to any caller (no RLS scoping), the full team's numbers still
+      // travel to this browser over the network before being filtered out here.
+      // See the handoff notes on reachout_target_report before treating this as secure.
+      myReachoutState.targets = tg ? {
+        ...tg,
+        summary: (tg.summary || []).filter(u => u.user_id === myId),
+        matrix: (tg.matrix || []).filter(m => m.user_id === myId)
+      } : tg;
+    }
+
+    function viewMyReachout() {
+      const tg = myReachoutState.targets;
+      const dateBar = el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4 mb-4 flex flex-wrap items-center gap-3' },
+        el('label', { class: 'text-xs text-stone-600' }, 'From ', el('input', { type: 'date', value: myReachoutState.from, class: 'ml-1 px-2 py-1 border border-stone-300 rounded',
+          onchange: e => { myReachoutState.from = e.target.value; } })),
+        el('label', { class: 'text-xs text-stone-600' }, 'To ', el('input', { type: 'date', value: myReachoutState.to, class: 'ml-1 px-2 py-1 border border-stone-300 rounded',
+          onchange: e => { myReachoutState.to = e.target.value; } })),
+        el('button', { class: 'px-3 py-1.5 text-sm rounded-lg btn-brand', onClick: async () => { await fetchMyReachout(); render(); } }, 'Apply')
+      );
+
+      if (!tg) return el('div', {}, pageHeader('Insights', 'My Reach-out', 'Your daily target vs achieved', null), dateBar,
+        el('div', { class: 'text-center text-sm text-stone-500 py-10' }, 'Loading…'));
+
+      const me = (tg.summary || [])[0];
+      if (!me) {
+        return el('div', {}, pageHeader('Insights', 'My Reach-out', 'Your daily target vs achieved', null), dateBar,
+          el('div', { class: 'bg-white border border-stone-200 rounded-xl p-6 text-center text-sm text-stone-500' },
+            'No reach-out target is set for you yet, or there\'s no activity in this date range.'));
+      }
+
+      const matrixByDay = {};
+      (tg.matrix || []).forEach(m => { matrixByDay[m.d] = m; });
+      const cellColor = (achieved, target) => {
+        if (!target) return 'bg-stone-50 text-stone-400';
+        const pct = (achieved / target) * 100;
+        if (pct >= 100) return 'bg-emerald-50 text-emerald-800';
+        if (pct >= 50)  return 'bg-amber-50 text-amber-800';
+        return 'bg-rose-50 text-rose-700';
+      };
+      const dayLabel = (d) => { const dt = new Date(d); return `${dt.getDate()}/${dt.getMonth()+1}`; };
+      const weekday = (d) => ['Su','Mo','Tu','We','Th','Fr','Sa'][new Date(d).getDay()];
+      const totalPct = me.total_target ? Math.round(100 * me.total_achieved / me.total_target) : 0;
+      const totalColor = !me.total_target ? 'text-stone-400' : totalPct >= 100 ? 'text-emerald-700 font-semibold' : totalPct >= 50 ? 'text-amber-700' : 'text-rose-600 font-semibold';
+
+      const targetCard = el('div', { class: 'bg-white border border-stone-200 rounded-xl overflow-hidden mb-4' },
+        el('div', { class: 'px-4 py-2 border-b border-stone-200 bg-stone-50 flex items-center justify-between' },
+          el('div', { class: 'text-sm font-semibold' }, 'Target vs Achieved'),
+          el('div', { class: 'text-[11px] text-stone-500' }, 'Sundays excluded · New scouts only')
+        ),
+        el('div', { class: 'overflow-x-auto' },
+          el('table', { class: 'w-full text-xs' },
+            el('thead', {},
+              el('tr', { class: 'bg-stone-50 text-stone-500 uppercase text-[10px]' },
+                el('th', { class: 'px-2 py-1.5 text-left sticky left-0 bg-stone-50' }, 'Target/day'),
+                ...(tg.days || []).map(d => el('th', { class: 'px-1.5 py-1.5 text-center' },
+                  el('div', { class: 'text-[10px]' }, weekday(d)),
+                  el('div', { class: 'font-normal' }, dayLabel(d))
+                )),
+                el('th', { class: 'px-2 py-1.5 text-right bg-stone-100' }, 'Total')
+              )
+            ),
+            el('tbody', {},
+              el('tr', {},
+                el('td', { class: 'px-2 py-1.5 sticky left-0 bg-white text-stone-600' }, String(me.daily_target || 0)),
+                ...(tg.days || []).map(d => {
+                  const cell = matrixByDay[d] || { achieved: 0, target: me.daily_target };
+                  return el('td', { class: `px-1.5 py-1.5 text-center ${cellColor(cell.achieved, cell.target)}` },
+                    me.daily_target ? `${cell.achieved}/${cell.target}` : String(cell.achieved)
+                  );
+                }),
+                el('td', { class: `px-2 py-1.5 text-right bg-stone-50 ${totalColor}` },
+                  `${me.total_achieved}/${me.total_target} (${totalPct}%)`
+                )
+              )
+            )
+          )
+        )
+      );
+
+      return el('div', {}, pageHeader('Insights', 'My Reach-out', 'Your daily target vs achieved', null), dateBar, targetCard);
     }
 
     // ===============================================================
@@ -3009,6 +3095,7 @@
       profiles:  { label: 'Profiles',  icon: '👤', view: viewProfiles,  prefetch: fetchProfiles },
       followups: { label: 'Follow-ups', icon: '⏰', view: viewFollowups, prefetch: fetchFollowups },
       agreement: { label: 'Agreement Form', icon: '📄', view: viewAgreementForm },
+      myreachout:{ label: 'My Reach-out', icon: '🎯', view: viewMyReachout, prefetch: fetchMyReachout, nonAdminOnly: true },
       reports:   { label: 'Reports',    icon: '📈', view: viewReports,   prefetch: fetchReports, adminOnly: true },
       team:      { label: 'Team',       icon: '👥', view: viewTeam,      prefetch: fetchTeam,    adminOnly: true },
     };
@@ -3045,7 +3132,7 @@
         el('div', { class: 'px-6 pt-4 pb-2 text-[10px] font-bold text-stone-400 uppercase tracking-widest' }, 'Influencer CRM'),
         el('nav', { class: 'flex-1 px-3 pb-3 space-y-0.5' },
           ...Object.entries(ROUTES)
-            .filter(([k, r]) => !r.adminOnly || state.me?.role === 'admin')
+            .filter(([k, r]) => (!r.adminOnly || state.me?.role === 'admin') && (!r.nonAdminOnly || state.me?.role !== 'admin'))
             .map(([k, r]) => {
               const active = state.route === k;
               const badge = (k === 'followups' && state.overdueCount > 0)
