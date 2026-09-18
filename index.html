@@ -1048,6 +1048,15 @@
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     }
+    function extractUtmCampaign(utmLink) {
+      if (!utmLink) return '';
+      try {
+        return new URL(utmLink).searchParams.get('utm_campaign') || '';
+      } catch {
+        const m = utmLink.match(/utm_campaign=([^&#]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+      }
+    }
     function parseCSV(text) {
       // Simple CSV parser supporting quoted fields with commas
       const rows = [];
@@ -1634,7 +1643,27 @@
                   { label: 'User ID', value: 'user_id' }, { label: 'Date', value: 'date' },
                   { label: 'New scouts achieved', value: 'achieved' }, { label: 'Daily target', value: 'target' }
                 ]));
-            } }, '⬇ New scouts vs target (raw)')
+            } }, '⬇ New scouts vs target (raw)'),
+          el('button', { class: 'px-3 py-1.5 text-sm rounded-lg bg-white border border-stone-200 hover:bg-stone-50 text-stone-700',
+            onClick: async () => {
+              const { data, error } = await supabase.from('campaigns')
+                .select('utm_link, spends_inr, gone_live_date')
+                .not('gone_live_date', 'is', null)
+                .gte('gone_live_date', reportsState.from).lte('gone_live_date', reportsState.to)
+                .order('gone_live_date', { ascending: false });
+              if (error) return toast(error.message, 'error');
+              if (!data || !data.length) return toast('No Gone Live campaigns in this range', 'error');
+              const rows = data
+                .map(c => ({ utm_campaign: extractUtmCampaign(c.utm_link), spends: c.spends_inr, gone_live: c.gone_live_date }))
+                .filter(r => r.utm_campaign);
+              if (!rows.length) return toast('No campaigns with a usable UTM link in this range', 'error');
+              downloadCSV(`utm-campaign-spends_${reportsState.from}_to_${reportsState.to}.csv`,
+                toCSV(rows, [
+                  { label: 'UTM Campaign', value: 'utm_campaign' },
+                  { label: 'Spends (INR)', value: 'spends' },
+                  { label: 'Gone Live Date', value: 'gone_live' }
+                ]));
+            } }, '⬇ UTM Campaign vs Spends (raw)')
         )
       ) : null;
 
