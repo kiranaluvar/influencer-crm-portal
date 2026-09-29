@@ -72,7 +72,7 @@
     const ALLOWED_DOMAIN = 'brightchamps.com';
     // YouTube Data API key for the YouTube Discovery page. Paste the key between the quotes.
     // Keep it restricted in Google Cloud to https://kiranaluvar.github.io/* and to YouTube Data API v3 only.
-    const YT_API_KEY = 'AIzaSyB_REs0bLElYFZLLy4oUJipnvxT3NIg9bs';
+    const YT_API_KEY = 'PASTE_YOUTUBE_API_KEY_HERE';
     const PAGE_SIZE = 25;
 
     const LANGUAGES = ['Hindi','English','Tamil','Telugu','Kannada','Malayalam','Marathi','Gujarati','Bengali','Punjabi','Urdu'];
@@ -3145,7 +3145,7 @@
       status: '', statusErr: false, progress: 0,
       crmKeys: null,            // Map normalized handle / channel id -> profile_id
       crmEmails: new Map(),     // email -> profile_id
-      filter: '', hideCrm: false, emailOnly: false, locOnly: false, genre: '',
+      filter: '', hideCrm: false, emailOnly: false, locOnly: false, indianOnly: false, genre: '',
       sortKey: 'avg7', sortDir: -1,
     };
     const ytHasBuiltInKey = () => !!YT_API_KEY && YT_API_KEY !== 'PASTE_YOUTUBE_API_KEY_HERE';
@@ -3249,6 +3249,29 @@
       const m = Math.round(secs / 60);
       return m < 1 ? `${Math.round(secs)} sec` : m >= 60 ? `${Math.floor(m / 60)} hr ${m % 60} min` : `${m} min`;
     };
+
+    // Is this creator likely Indian / of Indian origin? Uses Indian-language audio, Indian scripts,
+    // country = India, and culture words (festivals, food, family words, desi/NRI).
+    const DISC_INDIAN_LANGS = ['hi', 'ta', 'te', 'kn', 'ml', 'mr', 'bn', 'gu', 'pa', 'or', 'as'];
+    const DISC_INDIAN_SCRIPT = /[\u0900-\u0D7F]/;
+    const DISC_INDIAN_WORDS = ['indian', 'india', 'desi', 'nri', 'hindi', 'tamil', 'telugu', 'kannada', 'malayalam', 'marathi', 'bengali', 'gujarati', 'punjabi',
+      'diwali', 'deepavali', 'holi', 'navratri', 'ganesh', 'ganpati', 'pongal', 'onam', 'ugadi', 'rakhi', 'raksha bandhan', 'karwa chauth', 'durga puja', 'sankranti', 'janmashtami',
+      'saree', 'sari', 'kurta', 'lehenga', 'biryani', 'dosa', 'idli', 'chapati', 'roti', 'paneer', 'masala', 'chai', 'sambar', 'rasam', 'dal', 'poha', 'upma', 'paratha', 'tiffin',
+      'amma', 'appa', 'nani', 'dadi', 'ammamma', 'paati', 'thatha', 'didi', 'bhaiya', 'bollywood', 'kollywood', 'tollywood', 'puja', 'pooja', 'mandir', 'temple visit'];
+    const DISC_INDIAN_RX = new RegExp('(?:^|[^a-z])(' + DISC_INDIAN_WORDS.map(w => w.replace(/ /g, '\\s+')).join('|') + ')(?=$|[^a-z])', 'gi');
+
+    function discIndianSignals({ texts, videoLangs, country }) {
+      const reasons = [];
+      const joined = texts.join(' \n ');
+      if (country === 'IN') reasons.push('Country: India');
+      const langs = [...new Set(videoLangs.map(l => String(l || '').toLowerCase().split('-')[0]).filter(l => DISC_INDIAN_LANGS.includes(l)))];
+      if (langs.length) reasons.push(langs.map(discLangName).join(', ') + ' videos');
+      if (DISC_INDIAN_SCRIPT.test(joined)) reasons.push('Indian-language text');
+      const words = [...new Set((joined.toLowerCase().match(DISC_INDIAN_RX) || []).map(w => w.replace(/[^a-z ]/g, '').trim()))];
+      const strong = reasons.length > 0;
+      if (words.length) reasons.push('mentions ' + words.slice(0, 4).join(', '));
+      return { indian: strong || words.length >= 2, reasons };
+    }
 
     const discNormHandle = (h) => String(h || '').trim().toLowerCase().replace(/^@/, '');
 
@@ -3472,10 +3495,18 @@
       if (locWord && terms.length) {
         const W = locWord;
         const base = terms.filter(t => !(lang && DISC_NL_LOCAL_PARENTING[lang.code]?.includes(t))).slice(0, 5).map(t => `${t} ${W}`);
-        const extra = picked.some(t => t.genre === 'Parenting')
-          ? [`${L} family in ${W}`, `${L} mom in ${W}`, `${L} vlog ${W} life`]
-          : [`${L} in ${W}`, `${L} vlog ${W}`];
-        terms = [...extra, ...base];
+        const isParenting = picked.some(t => t.genre === 'Parenting');
+        if (abroad && !lang) {
+          // "Indian creators in Texas": Indians abroad usually say desi / NRI
+          terms = isParenting
+            ? [`indian family in ${W}`, `desi mom in ${W}`, `nri family vlog ${W}`, `indian mom vlog ${W}`, `desi family vlog ${W}`, `nri life in ${W}`, `indian kids ${W}`, `desi parenting ${W}`]
+            : [`indian in ${W}`, `desi vlog ${W}`, `nri life in ${W}`, ...base.map(t => t.replace(/^indian /, 'desi '))];
+        } else {
+          const extra = isParenting
+            ? [`${L} family in ${W}`, `${L} mom in ${W}`, `${L} vlog ${W} life`]
+            : [`${L} in ${W}`, `${L} vlog ${W}`];
+          terms = [...extra, ...base];
+        }
       }
       terms = [...new Set(terms.map(t => t.replace(/\s+/g, ' ').trim()))].slice(0, 8);
 
@@ -3484,6 +3515,7 @@
         countryLabel: country ? country.label : '',
         placeLabel: place && !place.langState ? place.label : '',
         locWords: place && !place.langState ? place.words : (abroad ? abroad.words : []),
+        wantIndian: !!abroad && (!!lang || has('indian') || has('india') || has('desi') || has('nri')),
         lang: lang ? lang.code : '',
         langName: lang ? lang.name.charAt(0).toUpperCase() + lang.name.slice(1) : '',
         genre: picked[0]?.genre || '',
@@ -3507,6 +3539,7 @@
       if (q.maxSubs != null) f.maxSubs = String(Math.round(q.maxSubs));
       DISC.genre = q.genre;
       DISC.lastPlan = q;
+      DISC.indianOnly = q.wantIndian;   // abroad + Indian: hide non-Indian creators by default
       render();                       // show the filled-in search terms and filters
       runDiscover();
     }
@@ -3667,6 +3700,11 @@
                 return clean && new RegExp('(?:^|\\s)' + clean + '(?=\\s|$)').test(hay);
               });
             }
+            const ind = discIndianSignals({
+              texts: [sn.title, sn.description, c.brandingSettings?.channel?.keywords || '', ...videos.slice(0, 15).map(v => v.title + ' ' + v.desc.slice(0, 600))],
+              videoLangs: videos.map(v => v.lang),
+              country: sn.country || '',
+            });
             const g = discDetectGenre({
               title: sn.title, description: desc,
               keywords: c.brandingSettings?.channel?.keywords || '',
@@ -3702,6 +3740,7 @@
               terms: [...(found.get(c.id) || [])],
               crmProfileId: null,
               locHit, locLabel: f.location || '',
+              indian: ind.indian, indianWhy: ind.reasons.join('; '),
               median7, spiky, avgLikes, avgComments, avgLenSecs, uploadsPerMonth, language, madeForKids,
               viewsToSubs: (avg7v != null && c.statistics?.subscriberCount > 0 && !c.statistics?.hiddenSubscriberCount)
                 ? +(100 * avg7v / +c.statistics.subscriberCount).toFixed(1) : null,
@@ -3739,6 +3778,7 @@
         if (DISC.hideCrm && r.crmProfileId) return false;
         if (DISC.emailOnly && !r.emails.length) return false;
         if (DISC.locOnly && r.locHit === false) return false;
+        if (DISC.indianOnly && !r.indian) return false;
         if (DISC.genre === '__none' && r.genre) return false;
         if (DISC.genre && DISC.genre !== '__none' && r.genre !== DISC.genre && !r.genreAlso.includes(DISC.genre)) return false;
         if (q && !(`${r.title} ${r.handle} ${r.description}`.toLowerCase().includes(q))) return false;
@@ -3791,6 +3831,7 @@
         ['Total views', 'totalViews'], ['Total videos', 'videoCount'], ['Country', 'country'], ['Channel created', r => (r.joined || '').slice(0, 10)],
         ['Emails', r => r.emails.join('; ')], ['Email source', 'emailSource'], ['Instagram', r => r.instagram.map(h => '@' + h).join('; ')],
         ['Link-in-bio', r => r.bio.join('; ')], ['Mostly Shorts', r => r.shortsShare >= 0.7 ? 'Yes' : 'No'],
+        ['Indian creator', r => r.indian ? 'Yes' : 'No'], ['Indian signals', 'indianWhy'],
         ['Location checked', 'locLabel'], ['Mentions location', r => r.locHit == null ? '' : (r.locHit ? 'Yes' : 'No')],
         ['Already in CRM', r => r.crmProfileId ? 'Yes' : 'No'], ['CRM match by', r => r.crmMatch || ''], ['Matched search terms', r => r.terms.join('; ')], ['Description', 'description'],
       ];
@@ -3853,6 +3894,7 @@
                 <div class="text-xs text-stone-500">${escape(r.handle || r.id)}</div>
                 ${r.shortsShare >= 0.7 ? '<span class="badge bg-amber-50 text-amber-700 mt-1">Mostly Shorts</span>' : ''}
                 ${r.locHit ? `<span class="badge bg-emerald-50 text-emerald-700 mt-1">Mentions ${escape(r.locLabel)}</span>` : ''}
+                ${r.indian ? `<span class="badge bg-sky-50 text-sky-700 mt-1" title="${escape(r.indianWhy)}">Indian creator</span>` : ''}
                 ${r.madeForKids ? '<span class="badge bg-rose-50 text-rose-700 mt-1" title="YouTube marks this content as made for kids: comments are off and targeted ads are blocked">Made for kids</span>' : ''}
               </div></div></td>
             <td class="px-3 py-2.5 whitespace-nowrap">${r.genre
@@ -3979,6 +4021,7 @@
         ),
         toggle('hideCrm', 'Hide channels already in CRM'), toggle('emailOnly', 'Only with email'),
         toggle('locOnly', 'Only channels that mention the location'),
+        toggle('indianOnly', 'Only Indian creators'),
         el('span', { id: 'disc-count', class: 'text-sm text-stone-500' }),
         el('div', { class: 'flex-1' }),
         el('button', { id: 'disc-csv', class: 'px-3 py-2 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-50', onClick: discDownloadCsv }, '⬇ Download CSV')
