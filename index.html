@@ -473,7 +473,10 @@
     // ===============================================================
     // ADD PROFILE FLOW
     // ===============================================================
-    function openAddProfileModal() {
+    function openAddProfileModal(opts) {
+      // opts is optional: { prefill: {...}, onSaved: fn }. When used as a click handler, opts is the click event (ignored).
+      const prefill = opts && opts.prefill ? opts.prefill : null;
+      const onSaved = opts && typeof opts.onSaved === 'function' ? opts.onSaved : null;
       const form = el('div', { class: 'space-y-3' });
       const fields = {};
       const mkField = (label, name, type = 'text', opts = {}) => {
@@ -602,6 +605,7 @@
 
         modal.close();
         toast('Profile + platform created — default campaign in Scraping', 'success');
+        if (onSaved) { try { onSaved(prof); } catch (e) { console.error(e); } }
         if (state.route === 'campaigns') { state.lists.campaigns.page = 1; await fetchCampaigns(); render(); }
         if (state.route === 'profiles')  { state.lists.profiles.page = 1;  await fetchProfiles();  render(); }
       });
@@ -610,6 +614,12 @@
        sectionHeader('Source Platform (how you found them)'),
        platWrap, usernameWrap, linkWrap, genreWrap, avgViewsWrap, followersWrap
       ].forEach(f => form.appendChild(f));
+
+      if (prefill) {
+        const setVal = (k, v) => { if (v != null && v !== '' && fields[k]) fields[k].value = String(v); };
+        ['lead_type','name','email','phone','region','platform','username','link','genre','avg_views','followers'].forEach(k => setVal(k, prefill[k]));
+        updateHint();
+      }
 
       form.appendChild(el('div', { class: 'flex justify-end gap-2 pt-3 mt-2 border-t border-stone-200' },
         el('button', { class: 'px-3 py-1.5 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50', onClick: () => modal.close() }, 'Cancel'),
@@ -3114,11 +3124,507 @@
     }
 
     // ===============================================================
+    // YOUTUBE DISCOVERY
+    // Searches YouTube channels via the YouTube Data API v3 (key stored per browser),
+    // computes avg views of the latest 3 / 7 videos, pulls contacts from descriptions,
+    // flags channels already in the CRM, and pre-fills Add Profile.
+    // ===============================================================
+    const YT_API = 'https://www.googleapis.com/youtube/v3/';
+    const YT_KEY_LS = 'bc_yt_api_key';
+    const YT_COUNTRY_NAMES = { IN: 'India', US: 'United States', GB: 'United Kingdom', AE: 'United Arab Emirates', CA: 'Canada', AU: 'Australia', SG: 'Singapore', SA: 'Saudi Arabia', QA: 'Qatar', NZ: 'New Zealand', MY: 'Malaysia', NP: 'Nepal', LK: 'Sri Lanka', BD: 'Bangladesh', PK: 'Pakistan' };
+    const DISC = {
+      form: {
+        terms: 'mom vlog india\nparenting india\nkids activities hindi',
+        region: 'IN', lang: '', perTerm: '50', minSubs: '5000', maxSubs: '', activeDays: '90',
+        longOnly: true, countryOnly: false,
+      },
+      results: [], running: false, stop: false, quota: 0,
+      status: '', statusErr: false, progress: 0,
+      crmKeys: null,            // Map normalized handle / channel id -> profile_id
+      crmEmails: new Map(),     // email -> profile_id
+      filter: '', hideCrm: false, emailOnly: false,
+      sortKey: 'avg7', sortDir: -1,
+    };
+    const ytGetKey = () => { try { return localStorage.getItem(YT_KEY_LS) || ''; } catch { return ''; } };
+    const ytSetKey = (k) => { try { localStorage.setItem(YT_KEY_LS, k); return true; } catch { return false; } };
+    const ytNum = (n) => n == null ? '—' : Number(n).toLocaleString('en-IN');
+
+    async function ytCall(endpoint, params, cost) {
+      const url = YT_API + endpoint + '?' + new URLSearchParams({ ...params, key: ytGetKey() });
+      const res = await fetch(url);
+      DISC.quota += cost;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const reason = data?.error?.errors?.[0]?.reason || '';
+        let msg = data?.error?.message || res.statusText;
+        if (reason === 'quotaExceeded') msg = 'Daily YouTube API quota used up. It resets at 12:30 PM IST.';
+        else if (reason === 'keyInvalid' || /API key not valid/i.test(msg)) msg = 'The YouTube API key is not valid. Check it in Google Cloud Console → Credentials.';
+        else if (/referer|referrer/i.test(msg)) msg = 'The API key is restricted to other websites. Add this site under Application restrictions in Google Cloud.';
+        const e = new Error(msg);
+        e.fatal = res.status === 403 || res.status === 400 || reason === 'quotaExceeded';
+        throw e;
+      }
+      return data;
+    }
+
+    function ytParseDuration(iso) {
+      const m = /P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(iso || '');
+      if (!m) return 0;
+      return (+m[1] || 0) * 86400 + (+m[2] || 0) * 3600 + (+m[3] || 0) * 60 + (+m[4] || 0);
+    }
+
+    function ytExtractContacts(text) {
+      const emails = [...new Set((text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) || []).map(e => e.toLowerCase().replace(/\.$/, '')))];
+      const instagram = [...new Set([...text.matchAll(/instagram\.com\/([A-Za-z0-9_.]{2,30})/gi)].map(m => m[1].replace(/\.$/, '')))]
+        .filter(h => !['p', 'reel', 'reels', 'stories', 'explore'].includes(h.toLowerCase()));
+      const bio = [...new Set([...text.matchAll(/https?:\/\/(?:www\.)?(?:linktr\.ee|bio\.link|beacons\.ai|linkin\.bio|taplink\.cc|linkbio\.co)\/[A-Za-z0-9_.\-]+/gi)].map(m => m[0]))];
+      return { emails, instagram, bio };
+    }
+
+    async function ytPool(items, limit, fn) {
+      let i = 0;
+      const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (i < items.length && !DISC.stop) { const idx = i++; await fn(items[idx], idx); }
+      });
+      await Promise.all(workers);
+    }
+
+    const discNormHandle = (h) => String(h || '').trim().toLowerCase().replace(/^@/, '');
+
+    async function loadDiscoverCrm() {
+      const map = new Map();
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase.from('platforms').select('username, link, profile_id').eq('platform', 'Youtube').range(from, from + 999);
+        if (error) { console.error(error); break; }
+        if (!data?.length) break;
+        for (const r of data) {
+          if (r.username) map.set(discNormHandle(r.username), r.profile_id);
+          const m = /youtube\.com\/(?:@([^/?#\s]+)|channel\/(UC[\w-]+))/i.exec(r.link || '');
+          if (m) map.set(decodeURIComponent(m[1] || m[2]).toLowerCase(), r.profile_id);
+        }
+        if (data.length < 1000) break;
+      }
+      DISC.crmKeys = map;
+    }
+
+    async function loadDiscoverCrmEmails() {
+      const emails = [...new Set(DISC.results.flatMap(r => r.emails))].filter(e => !DISC.crmEmails.has(e));
+      for (let i = 0; i < emails.length; i += 100) {
+        const { data, error } = await supabase.from('profiles').select('id, email').in('email', emails.slice(i, i + 100));
+        if (error) { console.error(error); break; }
+        (data || []).forEach(p => p.email && DISC.crmEmails.set(p.email.toLowerCase(), p.id));
+      }
+    }
+
+    function discMarkCrm() {
+      for (const r of DISC.results) {
+        r.crmProfileId = (DISC.crmKeys && (DISC.crmKeys.get(discNormHandle(r.handle)) || DISC.crmKeys.get(r.id.toLowerCase())))
+          || r.emails.map(e => DISC.crmEmails.get(e)).find(Boolean) || null;
+      }
+    }
+
+    async function fetchDiscover() {
+      if (!DISC.crmKeys) await loadDiscoverCrm();
+    }
+
+    function discSetStatus(msg, isErr = false) {
+      DISC.status = msg; DISC.statusErr = isErr;
+      const n = document.getElementById('disc-status');
+      if (n) { n.textContent = msg; n.className = 'text-sm ' + (isErr ? 'text-rose-600' : 'text-stone-500'); }
+    }
+    function discSetProgress(p) {
+      DISC.progress = Math.max(0, Math.min(100, p));
+      const n = document.getElementById('disc-bar');
+      if (n) n.style.width = DISC.progress + '%';
+    }
+    function discSyncControls() {
+      const run = document.getElementById('disc-run'), stop = document.getElementById('disc-stop'), csv = document.getElementById('disc-csv');
+      if (run) { run.disabled = DISC.running; run.textContent = DISC.running ? 'Searching…' : 'Find channels'; }
+      if (stop) stop.disabled = !DISC.running;
+      if (csv) csv.disabled = !DISC.results.length;
+    }
+
+    async function runDiscover() {
+      if (DISC.running) return;
+      if (!ytGetKey()) return discSetStatus('Add your YouTube API key first (Save key).', true);
+      const f = DISC.form;
+      const terms = f.terms.split('\n').map(s => s.trim()).filter(Boolean);
+      if (!terms.length) return discSetStatus('Enter at least one search term.', true);
+      const perTerm = +f.perTerm || 50;
+      const minSubs = +f.minSubs || 0;
+      const maxSubs = f.maxSubs ? +f.maxSubs : Infinity;
+      const activeDays = +f.activeDays || 0;
+
+      DISC.running = true; DISC.stop = false; DISC.quota = 0; DISC.results = [];
+      discSyncControls(); discRenderResults(); discSetProgress(2);
+
+      try {
+        if (!DISC.crmKeys) await loadDiscoverCrm();
+
+        // 1. Search channels for each term
+        const found = new Map();
+        for (let t = 0; t < terms.length && !DISC.stop; t++) {
+          let pageToken = '', got = 0;
+          while (got < perTerm && !DISC.stop) {
+            discSetStatus(`Searching “${terms[t]}”… (${found.size} channels so far)`);
+            const params = { part: 'snippet', type: 'channel', q: terms[t], maxResults: Math.min(50, perTerm - got) };
+            if (f.region) params.regionCode = f.region;
+            if (f.lang) params.relevanceLanguage = f.lang;
+            if (pageToken) params.pageToken = pageToken;
+            const data = await ytCall('search', params, 100);
+            for (const it of data.items || []) {
+              const id = it.snippet?.channelId || it.id?.channelId;
+              if (!id) continue;
+              if (!found.has(id)) found.set(id, new Set());
+              found.get(id).add(terms[t]);
+            }
+            got += (data.items || []).length;
+            pageToken = data.nextPageToken;
+            if (!pageToken || !(data.items || []).length) break;
+          }
+          discSetProgress(5 + 20 * (t + 1) / terms.length);
+        }
+
+        // 2. Channel details (50 per call)
+        const ids = [...found.keys()];
+        let channels = [];
+        for (let i = 0; i < ids.length && !DISC.stop; i += 50) {
+          discSetStatus(`Loading channel details… ${Math.min(i + 50, ids.length)} / ${ids.length}`);
+          const data = await ytCall('channels', { part: 'snippet,statistics,contentDetails,brandingSettings', id: ids.slice(i, i + 50).join(','), maxResults: 50 }, 1);
+          channels.push(...(data.items || []));
+          discSetProgress(25 + 10 * Math.min(1, (i + 50) / ids.length));
+        }
+        channels = channels.filter(c => {
+          const subs = +c.statistics?.subscriberCount || 0;
+          if (c.statistics?.hiddenSubscriberCount) return minSubs === 0;
+          if (subs < minSubs || subs > maxSubs) return false;
+          if (f.countryOnly && f.region && (c.snippet?.country || '') !== f.region) return false;
+          return true;
+        });
+
+        // 3. Latest uploads + stats per channel
+        let done = 0;
+        const cutoff = activeDays ? Date.now() - activeDays * 86400000 : 0;
+        await ytPool(channels, 5, async (c) => {
+          try {
+            const uploads = c.contentDetails?.relatedPlaylists?.uploads;
+            if (!uploads) return;
+            const pl = await ytCall('playlistItems', { part: 'contentDetails', playlistId: uploads, maxResults: f.longOnly ? 30 : 10 }, 1);
+            const vids = (pl.items || []).map(v => v.contentDetails.videoId);
+            if (!vids.length) return;
+            const vd = await ytCall('videos', { part: 'statistics,contentDetails,snippet', id: vids.join(','), maxResults: 50 }, 1);
+            const videos = (vd.items || [])
+              .filter(v => v.snippet?.liveBroadcastContent === 'none')
+              .map(v => ({
+                published: v.snippet.publishedAt,
+                secs: ytParseDuration(v.contentDetails?.duration),
+                views: +v.statistics?.viewCount || 0,
+                likes: +v.statistics?.likeCount || 0,
+                comments: +v.statistics?.commentCount || 0,
+                desc: v.snippet?.description || '',
+              }))
+              .sort((a, b) => new Date(b.published) - new Date(a.published));
+
+            const lastUpload = videos[0]?.published || null;
+            if (cutoff && (!lastUpload || new Date(lastUpload).getTime() < cutoff)) return;
+
+            const recent = (f.longOnly ? videos.filter(v => v.secs > 180) : videos).slice(0, 7);
+            const last3 = recent.slice(0, 3);
+            const avgOf = (arr) => arr.length ? Math.round(arr.reduce((a, v) => a + v.views, 0) / arr.length) : null;
+            const v7 = recent.reduce((a, v) => a + v.views, 0);
+            const e7 = recent.reduce((a, v) => a + v.likes + v.comments, 0);
+
+            const sn = c.snippet || {};
+            const desc = sn.description || '';
+            const chan = ytExtractContacts(desc + ' ' + (c.brandingSettings?.channel?.keywords || ''));
+            const vidc = ytExtractContacts(videos.map(v => v.desc).join('\n'));
+            const vidOnly = vidc.emails.filter(e => !chan.emails.includes(e));
+            const emailSource = chan.emails.length ? (vidOnly.length ? 'channel + videos' : 'channel description') : (vidOnly.length ? 'video descriptions' : '');
+            const handle = sn.customUrl || '';
+
+            DISC.results.push({
+              id: c.id,
+              title: sn.title || '',
+              handle,
+              link: handle ? `https://www.youtube.com/${handle}` : `https://www.youtube.com/channel/${c.id}`,
+              thumb: sn.thumbnails?.default?.url || '',
+              subs: c.statistics?.hiddenSubscriberCount ? null : (+c.statistics?.subscriberCount || 0),
+              totalViews: +c.statistics?.viewCount || 0,
+              videoCount: +c.statistics?.videoCount || 0,
+              country: sn.country || '',
+              joined: sn.publishedAt || '',
+              description: desc,
+              emails: [...chan.emails, ...vidOnly],
+              emailSource,
+              instagram: [...new Set([...chan.instagram, ...vidc.instagram])],
+              bio: [...new Set([...chan.bio, ...vidc.bio])],
+              avg3: avgOf(last3),
+              avg7: avgOf(recent),
+              n7: recent.length,
+              er7: v7 ? +(100 * e7 / v7).toFixed(2) : null,
+              uploads30: videos.filter(v => Date.now() - new Date(v.published) < 30 * 86400000).length,
+              shortsShare: videos.length ? videos.filter(v => v.secs <= 180).length / videos.length : 0,
+              lastUpload,
+              terms: [...(found.get(c.id) || [])],
+              crmProfileId: null,
+            });
+          } catch (e) {
+            if (e.fatal) { DISC.stop = true; discSetStatus(e.message, true); }
+          } finally {
+            done++;
+            discSetProgress(35 + 60 * done / Math.max(1, channels.length));
+            if (done % 5 === 0 || done === channels.length) {
+              if (!DISC.statusErr) discSetStatus(`Checking recent videos… ${done} / ${channels.length}`);
+              discMarkCrm(); discRenderResults();
+            }
+          }
+        });
+
+        await loadDiscoverCrmEmails();
+        discMarkCrm();
+        discSetProgress(100);
+        if (!DISC.statusErr) discSetStatus(`${DISC.stop ? 'Stopped. ' : ''}${DISC.results.length} channels ready. About ${ytNum(DISC.quota)} of your 10,000 daily API units used.`);
+      } catch (e) {
+        discSetStatus(e.message, true);
+      } finally {
+        DISC.running = false;
+        discSyncControls();
+        discRenderResults();
+      }
+    }
+
+    function discVisible() {
+      const q = DISC.filter.trim().toLowerCase();
+      const k = DISC.sortKey, d = DISC.sortDir;
+      return DISC.results.filter(r => {
+        if (DISC.hideCrm && r.crmProfileId) return false;
+        if (DISC.emailOnly && !r.emails.length) return false;
+        if (q && !(`${r.title} ${r.handle} ${r.description}`.toLowerCase().includes(q))) return false;
+        return true;
+      }).sort((a, b) => {
+        const x = a[k], y = b[k];
+        if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+        if (k === 'lastUpload') return d * (new Date(x) - new Date(y));
+        return typeof x === 'string' ? d * x.localeCompare(y) : d * (x - y);
+      });
+    }
+
+    function discAddToCrm(r) {
+      const email = r.emails[0] || '';
+      openAddProfileModal({
+        prefill: {
+          lead_type: email ? 'Email' : 'DM',
+          name: r.title,
+          email,
+          region: YT_COUNTRY_NAMES[r.country] || '',
+          platform: 'Youtube',
+          username: r.handle || r.title,
+          link: r.link,
+          avg_views: r.avg7 ?? '',
+          followers: r.subs ?? '',
+        },
+        onSaved: (prof) => {
+          r.crmProfileId = prof?.id || true;
+          if (DISC.crmKeys) {
+            if (r.handle) DISC.crmKeys.set(discNormHandle(r.handle), prof?.id);
+            DISC.crmKeys.set(r.id.toLowerCase(), prof?.id);
+          }
+          discRenderResults();
+        },
+      });
+    }
+
+    function discDownloadCsv() {
+      const cols = [
+        ['Channel name', 'title'], ['Channel link', 'link'], ['Handle', 'handle'], ['Channel ID', 'id'],
+        ['Subscribers', 'subs'], ['Avg views last 3', 'avg3'], ['Avg views last 7', 'avg7'], ['Videos used for avg', 'n7'],
+        ['Engagement % last 7', 'er7'], ['Uploads last 30 days', 'uploads30'], ['Last upload', r => (r.lastUpload || '').slice(0, 10)],
+        ['Total views', 'totalViews'], ['Total videos', 'videoCount'], ['Country', 'country'], ['Channel created', r => (r.joined || '').slice(0, 10)],
+        ['Emails', r => r.emails.join('; ')], ['Email source', 'emailSource'], ['Instagram', r => r.instagram.map(h => '@' + h).join('; ')],
+        ['Link-in-bio', r => r.bio.join('; ')], ['Mostly Shorts', r => r.shortsShare >= 0.7 ? 'Yes' : 'No'],
+        ['Already in CRM', r => r.crmProfileId ? 'Yes' : 'No'], ['Matched search terms', r => r.terms.join('; ')], ['Description', 'description'],
+      ];
+      const cell = v => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+      const lines = [cols.map(c => c[0]).join(',')].concat(
+        discVisible().map(r => cols.map(([, k]) => cell(typeof k === 'function' ? k(r) : r[k])).join(','))
+      );
+      const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `youtube-creators-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+    function discRenderResults() {
+      const host = document.getElementById('disc-results');
+      if (!host) return;
+      const rows = discVisible();
+      const countN = document.getElementById('disc-count');
+      if (countN) countN.textContent = DISC.results.length ? `${rows.length} of ${DISC.results.length} shown` : '';
+      discSyncControls();
+
+      const cols = [
+        ['title', 'Channel', ''], ['subs', 'Subscribers', 'r'], ['avg3', 'Avg views (last 3)', 'r'], ['avg7', 'Avg views (last 7)', 'r'],
+        ['er7', 'Engagement (last 7)', 'r'], ['uploads30', 'Uploads (30 days)', 'r'], ['lastUpload', 'Last upload', ''],
+        ['totalViews', 'Total views', 'r'], ['videoCount', 'Videos', 'r'], ['country', 'Country', ''],
+        [null, 'Email / Instagram', ''], [null, 'Description', ''], [null, '', ''],
+      ];
+      const th = cols.map(([k, label, align]) => {
+        const arrow = k && k === DISC.sortKey ? (DISC.sortDir < 0 ? ' ↓' : ' ↑') : '';
+        return `<th ${k ? `data-sort="${k}"` : ''} class="px-3 py-2.5 text-[11px] font-semibold text-stone-500 whitespace-nowrap bg-stone-50 border-b border-stone-200 ${align === 'r' ? 'text-right' : 'text-left'} ${k ? 'cursor-pointer hover:text-stone-800' : ''}">${escape(label)}${arrow}</th>`;
+      }).join('');
+
+      let body;
+      if (!rows.length) {
+        const msg = DISC.running ? 'Searching… results will appear here as they load.'
+          : DISC.results.length ? 'No channels match these filters.'
+          : 'Enter search terms above and select Find channels.';
+        body = `<tr><td colspan="${cols.length}" class="px-4 py-12 text-center text-sm text-stone-500">${escape(msg)}</td></tr>`;
+      } else {
+        body = rows.map(r => {
+          const contacts = [
+            ...r.emails.map(e => `<a href="mailto:${escape(e)}" class="block text-brand break-all">${escape(e)}</a>`),
+            ...r.instagram.map(h => `<a href="https://instagram.com/${escape(h)}" target="_blank" rel="noopener" class="block text-brand">IG @${escape(h)}</a>`),
+            ...r.bio.map(u => `<a href="${escape(u)}" target="_blank" rel="noopener" class="block text-brand break-all">${escape(u.replace(/^https?:\/\/(www\.)?/, ''))}</a>`),
+          ].join('');
+          const action = r.crmProfileId
+            ? (typeof r.crmProfileId === 'string'
+                ? `<a href="#profiles/${escape(r.crmProfileId)}" class="badge bg-emerald-50 text-emerald-700 whitespace-nowrap">In CRM · view</a>`
+                : `<span class="badge bg-emerald-50 text-emerald-700 whitespace-nowrap">In CRM</span>`)
+            : `<button data-add="${escape(r.id)}" class="px-2.5 py-1 text-xs rounded-lg btn-brand whitespace-nowrap">+ Add to CRM</button>`;
+          return `<tr class="border-b border-stone-100 hover:bg-stone-50/60 align-top">
+            <td class="px-3 py-2.5"><div class="flex gap-2.5 items-start min-w-[220px]">
+              ${r.thumb ? `<img src="${escape(r.thumb)}" alt="" loading="lazy" class="w-9 h-9 rounded-full bg-stone-200 flex-none">` : '<div class="w-9 h-9 rounded-full bg-stone-200 flex-none"></div>'}
+              <div class="min-w-0">
+                <a href="${escape(r.link)}" target="_blank" rel="noopener" class="font-medium text-stone-900 hover:underline">${escape(r.title)}</a>
+                <div class="text-xs text-stone-500">${escape(r.handle || r.id)}</div>
+                ${r.shortsShare >= 0.7 ? '<span class="badge bg-amber-50 text-amber-700 mt-1">Mostly Shorts</span>' : ''}
+              </div></div></td>
+            <td class="px-3 py-2.5 text-right tabular-nums">${r.subs == null ? '<span class="text-stone-400">Hidden</span>' : ytNum(r.subs)}</td>
+            <td class="px-3 py-2.5 text-right tabular-nums">${ytNum(r.avg3)}</td>
+            <td class="px-3 py-2.5 text-right tabular-nums">${ytNum(r.avg7)}${r.n7 && r.n7 < 7 ? `<div class="text-[11px] text-stone-400">from ${r.n7} videos</div>` : ''}</td>
+            <td class="px-3 py-2.5 text-right tabular-nums">${r.er7 == null ? '—' : r.er7 + '%'}</td>
+            <td class="px-3 py-2.5 text-right tabular-nums">${r.uploads30}</td>
+            <td class="px-3 py-2.5 whitespace-nowrap">${fmtDate(r.lastUpload)}</td>
+            <td class="px-3 py-2.5 text-right tabular-nums">${ytNum(r.totalViews)}</td>
+            <td class="px-3 py-2.5 text-right tabular-nums">${ytNum(r.videoCount)}</td>
+            <td class="px-3 py-2.5">${escape(r.country || '—')}</td>
+            <td class="px-3 py-2.5 text-xs max-w-[240px]">${contacts || '<span class="text-stone-400">None found</span>'}
+              ${r.emailSource ? `<div class="text-[11px] text-stone-400 mt-0.5">Email from ${escape(r.emailSource)}</div>` : ''}</td>
+            <td class="px-3 py-2.5"><div data-desc class="text-xs text-stone-500 max-w-[320px] max-h-[3.9em] overflow-hidden whitespace-pre-wrap cursor-pointer" title="Click to expand">${escape(r.description || '—')}</div></td>
+            <td class="px-3 py-2.5">${action}</td>
+          </tr>`;
+        }).join('');
+      }
+      host.innerHTML = `<div class="overflow-x-auto scrollbar-thin bg-white border border-stone-200 rounded-xl">
+        <table class="w-full min-w-[1350px] text-sm"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
+    }
+
+    function viewDiscover() {
+      const f = DISC.form;
+      const inputCls = 'mt-1 w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 bg-white';
+      const labelEl = (text, control, extra = '') => el('label', { class: 'block ' + extra },
+        el('span', { class: 'text-xs font-medium text-stone-600' }, text), control);
+      const bind = (key, node, isCheck = false) => {
+        node.addEventListener(isCheck ? 'change' : 'input', () => { f[key] = isCheck ? node.checked : node.value; });
+        return node;
+      };
+      const mkSelect = (key, options) => bind(key, el('select', { class: inputCls },
+        ...options.map(([v, l]) => el('option', { value: v, selected: f[key] === v }, l))));
+      const mkCheck = (key, text) => {
+        const cb = bind(key, el('input', { type: 'checkbox', checked: !!f[key], class: 'mt-0.5 rounded border-stone-300' }), true);
+        return el('label', { class: 'inline-flex items-start gap-2 text-sm text-stone-700 cursor-pointer' }, cb, el('span', {}, text));
+      };
+
+      // API key row
+      const keyInput = el('input', { type: 'password', autocomplete: 'off', placeholder: 'Paste your YouTube Data API key', value: ytGetKey(), class: inputCls });
+      const keyCard = el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4 mb-4' },
+        el('div', { class: 'flex flex-col sm:flex-row gap-2 sm:items-end' },
+          labelEl('YouTube Data API key (saved only in this browser)', keyInput, 'flex-1'),
+          el('button', { class: 'px-3 py-2 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50', onClick: () => {
+            const ok = ytSetKey(keyInput.value.trim());
+            toast(ok ? 'API key saved in this browser' : 'Could not save the key in this browser', ok ? 'success' : 'error');
+          } }, 'Save key')
+        )
+      );
+
+      const termsBox = bind('terms', el('textarea', { rows: '3', class: inputCls + ' resize-y' }, f.terms));
+      const searchCard = el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4 mb-4' },
+        el('div', { class: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3' },
+          labelEl('Search terms (one per line, each is a separate search)', termsBox, 'sm:col-span-2'),
+          labelEl('Region', mkSelect('region', [['IN', 'India'], ['US', 'United States'], ['GB', 'United Kingdom'], ['AE', 'UAE'], ['', 'Any']])),
+          labelEl('Language', mkSelect('lang', [['', 'Any'], ['en', 'English'], ['hi', 'Hindi'], ['ta', 'Tamil'], ['te', 'Telugu'], ['kn', 'Kannada'], ['ml', 'Malayalam'], ['mr', 'Marathi'], ['bn', 'Bengali'], ['gu', 'Gujarati'], ['pa', 'Punjabi']])),
+          labelEl('Channels per search term', mkSelect('perTerm', [['25', '25'], ['50', '50'], ['100', '100'], ['150', '150']])),
+          labelEl('Min subscribers', bind('minSubs', el('input', { type: 'number', min: '0', value: f.minSubs, class: inputCls }))),
+          labelEl('Max subscribers (blank = no limit)', bind('maxSubs', el('input', { type: 'number', min: '0', value: f.maxSubs, placeholder: 'e.g. 500000', class: inputCls }))),
+          labelEl('Uploaded within last', mkSelect('activeDays', [['30', '30 days'], ['90', '90 days'], ['180', '180 days'], ['0', 'Any time']]))
+        ),
+        el('div', { class: 'flex flex-wrap gap-x-6 gap-y-2 mt-3' },
+          mkCheck('longOnly', 'Long videos only for averages (skip videos 3 min or shorter, i.e. Shorts)'),
+          mkCheck('countryOnly', 'Only channels whose country is set to the chosen region')
+        ),
+        el('div', { class: 'flex flex-wrap items-center gap-2 mt-4' },
+          el('button', { id: 'disc-run', class: 'px-3 py-2 text-sm rounded-lg btn-brand', onClick: runDiscover }, 'Find channels'),
+          el('button', { id: 'disc-stop', class: 'px-3 py-2 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-50', onClick: () => { DISC.stop = true; discSetStatus('Stopping after current requests…'); } }, 'Stop'),
+          el('span', { id: 'disc-status', class: 'text-sm ' + (DISC.statusErr ? 'text-rose-600' : 'text-stone-500') }, DISC.status)
+        ),
+        el('div', { class: 'h-1.5 bg-stone-100 rounded mt-3 overflow-hidden' },
+          el('div', { id: 'disc-bar', class: 'h-full transition-all', style: `width:${DISC.progress}%; background-color: var(--brand);` }))
+      );
+
+      const filterInp = el('input', { type: 'search', placeholder: 'Filter by name, handle or description', value: DISC.filter,
+        class: 'w-full sm:w-72 px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 bg-white',
+        oninput: (e) => { DISC.filter = e.target.value; discRenderResults(); } });
+      const toggle = (key, text) => {
+        const cb = el('input', { type: 'checkbox', checked: DISC[key], class: 'rounded border-stone-300',
+          onchange: (e) => { DISC[key] = e.target.checked; discRenderResults(); } });
+        return el('label', { class: 'inline-flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer' }, cb, text);
+      };
+      const toolbar = el('div', { class: 'flex flex-wrap items-center gap-3 mb-3' },
+        filterInp, toggle('hideCrm', 'Hide channels already in CRM'), toggle('emailOnly', 'Only with email'),
+        el('span', { id: 'disc-count', class: 'text-sm text-stone-500' }),
+        el('div', { class: 'flex-1' }),
+        el('button', { id: 'disc-csv', class: 'px-3 py-2 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-50', onClick: discDownloadCsv }, '⬇ Download CSV')
+      );
+
+      const results = el('div', { id: 'disc-results' });
+      results.addEventListener('click', (e) => {
+        const sortTh = e.target.closest('th[data-sort]');
+        if (sortTh) {
+          const k = sortTh.dataset.sort;
+          if (DISC.sortKey === k) DISC.sortDir *= -1;
+          else { DISC.sortKey = k; DISC.sortDir = (k === 'title' || k === 'country') ? 1 : -1; }
+          return discRenderResults();
+        }
+        const addBtn = e.target.closest('button[data-add]');
+        if (addBtn) {
+          const r = DISC.results.find(x => x.id === addBtn.dataset.add);
+          if (r) discAddToCrm(r);
+          return;
+        }
+        const d = e.target.closest('[data-desc]');
+        if (d) d.classList.toggle('max-h-[3.9em]');
+      });
+
+      const page = el('div', {},
+        el('div', { class: 'mb-5' },
+          el('h1', { class: 'text-xl font-semibold text-stone-900 tracking-tight' }, 'YouTube Discovery'),
+          el('p', { class: 'text-sm text-stone-500 mt-1' }, 'Search YouTube channels by topic, compare average views on their latest videos, and add the right ones to the CRM.')
+        ),
+        keyCard, searchCard, toolbar, results
+      );
+      // Fill the table and button states once the page is in the DOM
+      setTimeout(() => { discRenderResults(); discSyncControls(); }, 0);
+      return page;
+    }
+
+    // ===============================================================
     // ROUTING + MAIN RENDER
     // ===============================================================
     const ROUTES = {
       campaigns: { label: 'Campaigns', icon: '🎯', view: viewCampaigns, prefetch: fetchCampaigns },
       profiles:  { label: 'Profiles',  icon: '👤', view: viewProfiles,  prefetch: fetchProfiles },
+      discover:  { label: 'YouTube Discovery', icon: '🔎', view: viewDiscover, prefetch: fetchDiscover },
       followups: { label: 'Follow-ups', icon: '⏰', view: viewFollowups, prefetch: fetchFollowups },
       agreement: { label: 'Agreement Form', icon: '📄', view: viewAgreementForm },
       myreachout: { label: 'My Reach-out', icon: '📊', view: viewMyReachout, prefetch: fetchMyReachout, hideForAdmin: true },
