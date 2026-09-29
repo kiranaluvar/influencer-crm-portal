@@ -70,6 +70,9 @@
     const SUPABASE_URL = 'https://qlfyxgsegzsonrzwbdxg.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsZnl4Z3NlZ3pzb25yendiZHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5NDM4MDMsImV4cCI6MjA5NzUxOTgwM30.Gs_DPVk3NsHjituTXoUwlsrk8Jho4RNaLK0uMMIPQnU';
     const ALLOWED_DOMAIN = 'brightchamps.com';
+    // YouTube Data API key for the YouTube Discovery page. Paste the key between the quotes.
+    // Keep it restricted in Google Cloud to https://kiranaluvar.github.io/* and to YouTube Data API v3 only.
+    const YT_API_KEY = 'AIzaSyB_REs0bLElYFZLLy4oUJipnvxT3NIg9bs';
     const PAGE_SIZE = 25;
 
     const LANGUAGES = ['Hindi','English','Tamil','Telugu','Kannada','Malayalam','Marathi','Gujarati','Bengali','Punjabi','Urdu'];
@@ -3145,7 +3148,11 @@
       filter: '', hideCrm: false, emailOnly: false,
       sortKey: 'avg7', sortDir: -1,
     };
-    const ytGetKey = () => { try { return localStorage.getItem(YT_KEY_LS) || ''; } catch { return ''; } };
+    const ytHasBuiltInKey = () => !!YT_API_KEY && YT_API_KEY !== 'PASTE_YOUTUBE_API_KEY_HERE';
+    const ytGetKey = () => {
+      if (ytHasBuiltInKey()) return YT_API_KEY;
+      try { return localStorage.getItem(YT_KEY_LS) || ''; } catch { return ''; }
+    };
     const ytSetKey = (k) => { try { localStorage.setItem(YT_KEY_LS, k); return true; } catch { return false; } };
     const ytNum = (n) => n == null ? '—' : Number(n).toLocaleString('en-IN');
 
@@ -3246,7 +3253,7 @@
 
     async function runDiscover() {
       if (DISC.running) return;
-      if (!ytGetKey()) return discSetStatus('Add your YouTube API key first (Save key).', true);
+      if (!ytGetKey()) return discSetStatus('The YouTube API key is not set up yet. Ask an admin to add it to the CRM code (YT_API_KEY).', true);
       const f = DISC.form;
       const terms = f.terms.split('\n').map(s => s.trim()).filter(Boolean);
       if (!terms.length) return discSetStatus('Enter at least one search term.', true);
@@ -3611,7 +3618,7 @@
           el('h1', { class: 'text-xl font-semibold text-stone-900 tracking-tight' }, 'YouTube Discovery'),
           el('p', { class: 'text-sm text-stone-500 mt-1' }, 'Search YouTube channels by topic, compare average views on their latest videos, and add the right ones to the CRM.')
         ),
-        keyCard, searchCard, toolbar, results
+        ytHasBuiltInKey() ? null : keyCard, searchCard, toolbar, results
       );
       // Fill the table and button states once the page is in the DOM
       setTimeout(() => { discRenderResults(); discSyncControls(); }, 0);
