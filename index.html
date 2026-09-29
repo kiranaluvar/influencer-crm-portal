@@ -3294,6 +3294,144 @@
       }
     }
 
+
+    // ---------------------------------------------------------------
+    // Plain-English search: "Tamil content creators who has kids"
+    // -> language + topic + a set of good YouTube search phrases.
+    // ---------------------------------------------------------------
+    const DISC_NL_LANGS = [
+      { code: 'ta', name: 'tamil',     words: ['tamil', 'tamizh', 'tamil nadu'] },
+      { code: 'te', name: 'telugu',    words: ['telugu', 'andhra', 'telangana'] },
+      { code: 'kn', name: 'kannada',   words: ['kannada', 'karnataka'] },
+      { code: 'ml', name: 'malayalam', words: ['malayalam', 'malayali', 'kerala'] },
+      { code: 'hi', name: 'hindi',     words: ['hindi'] },
+      { code: 'mr', name: 'marathi',   words: ['marathi', 'maharashtra'] },
+      { code: 'bn', name: 'bengali',   words: ['bengali', 'bangla', 'west bengal'] },
+      { code: 'gu', name: 'gujarati',  words: ['gujarati', 'gujarat'] },
+      { code: 'pa', name: 'punjabi',   words: ['punjabi', 'punjab'] },
+      { code: 'en', name: 'english',   words: ['english'] },
+    ];
+    // Local words for "mom" / parenting per language, used to widen the search
+    const DISC_NL_LOCAL_PARENTING = {
+      ta: ['tamil amma vlog', 'kuzhandhai valarppu'],
+      te: ['telugu amma vlogs', 'telugu pillala vlog'],
+      kn: ['kannada amma vlog'],
+      ml: ['malayalam amma vlog', 'malayalam kunju vlog'],
+      hi: ['mummy vlog hindi', 'bacchon ki parvarish'],
+      mr: ['marathi aai vlog'],
+      bn: ['bengali maa vlog'],
+      gu: ['gujarati mummy vlog'],
+      pa: ['punjabi mummy vlog'],
+    };
+    const DISC_NL_CITIES = ['bangalore','bengaluru','chennai','hyderabad','mumbai','delhi','pune','kolkata','kochi','ahmedabad','jaipur','lucknow','coimbatore','mysore','madurai','chandigarh','indore','surat','noida','gurgaon','gurugram'];
+    // Search phrases used when parenting is combined with another topic ("moms who cook", "family travel")
+    const DISC_NL_WITH_KIDS = {
+      'Cooking': ['{L} mom cooking vlog', '{L} kids recipes', '{L} lunch box recipes for kids'],
+      'Travel': ['{L} family travel vlog', '{L} travel with kids'],
+      'Fitness': ['{L} mom fitness', '{L} postpartum workout'],
+      'Nutrition': ['{L} kids nutrition', '{L} healthy food for kids'],
+      'Gardening': ['{L} gardening with kids', '{L} mom gardening vlog'],
+      'DIY/Home Improvement': ['{L} kids craft ideas', '{L} mom diy'],
+      'Infotainment': ['{L} kids learning activities', '{L} mom teaching kids'],
+      'Lifestyle': ['{L} mom lifestyle vlog', '{L} mom daily vlog'],
+    };
+    const DISC_NL_TOPICS = [
+      { genre: 'Parenting', words: ['kid', 'kids', 'child', 'children', 'baby', 'babies', 'toddler', 'toddlers', 'mom', 'moms', 'mommy', 'mummy', 'mother', 'mothers', 'mum', 'parent', 'parents', 'parenting', 'family', 'families', 'pregnant', 'pregnancy', 'son', 'daughter', 'newborn', 'dad', 'father'],
+        terms: ['{L} mom vlog', '{L} family vlog', '{L} parenting tips', '{L} baby care', '{L} kids vlog', '{L} pregnancy vlog'] },
+      { genre: 'Cooking', words: ['cooking', 'cook', 'recipe', 'recipes', 'food', 'kitchen', 'baking', 'chef'],
+        terms: ['{L} cooking channel', '{L} recipes', '{L} home cooking vlog'] },
+      { genre: 'Nutrition', words: ['nutrition', 'diet', 'healthy', 'dietitian', 'nutritionist', 'weight'],
+        terms: ['{L} nutrition tips', '{L} healthy diet', '{L} dietitian'] },
+      { genre: 'Fitness', words: ['fitness', 'workout', 'gym', 'yoga', 'exercise'],
+        terms: ['{L} fitness', '{L} home workout', '{L} yoga'] },
+      { genre: 'Travel', words: ['travel', 'travels', 'trip', 'trips', 'tour', 'traveller', 'traveler'],
+        terms: ['{L} travel vlog', '{L} family travel', '{L} road trip vlog'] },
+      { genre: 'Gardening', words: ['garden', 'gardening', 'plants', 'plant', 'terrace'],
+        terms: ['{L} gardening', '{L} terrace garden', '{L} home garden tips'] },
+      { genre: 'DIY/Home Improvement', words: ['diy', 'craft', 'crafts', 'decor', 'interior', 'home improvement', 'organisation', 'organization', 'cleaning'],
+        terms: ['{L} diy', '{L} home decor', '{L} craft ideas'] },
+      { genre: 'Infotainment', words: ['facts', 'education', 'educational', 'knowledge', 'science', 'learning', 'explained', 'tech'],
+        terms: ['{L} facts', '{L} educational channel', '{L} general knowledge'] },
+      { genre: 'Lifestyle', words: ['lifestyle', 'vlog', 'vlogs', 'vlogger', 'vloggers', 'beauty', 'fashion', 'makeup', 'daily'],
+        terms: ['{L} lifestyle vlog', '{L} daily vlog', '{L} beauty vlog'] },
+    ];
+    const DISC_NL_STOP = new Set(['a','an','the','who','whom','which','that','has','have','having','had','with','and','or','for','of','in','on','at','to','from','by','is','are','was','were','be','me','find','show','get','give','search','looking','look','want','need','all','any','some','please','content','creator','creators','influencer','influencers','youtuber','youtubers','youtube','channel','channels','people','person','india','indian','based','like','about']);
+
+    function discParseSentence(text) {
+      const raw = String(text || '').toLowerCase().replace(/[^a-z0-9\s+]/g, ' ').replace(/\s+/g, ' ').trim();
+      const has = (w) => new RegExp('(?:^|\\s)' + w.replace(/ /g, '\\s') + 's?(?=\\s|$)').test(raw);
+
+      const lang = DISC_NL_LANGS.find(l => l.words.some(has)) || null;
+      const topics = DISC_NL_TOPICS.filter(t => t.words.some(has));
+      // Parenting + a second topic (e.g. "moms who cook") -> keep both; otherwise keep the first two found
+      const picked = topics.slice(0, 2);
+
+      // Subscriber size hints: "under 50k", "above 1 lakh", "micro", "small", "big"
+      const toNum = (n, unit) => {
+        const v = parseFloat(n);
+        if (!unit) return v;
+        if (unit.startsWith('k')) return v * 1000;
+        if (unit.startsWith('l')) return v * 100000;
+        if (unit.startsWith('m')) return v * 1000000;
+        return v;
+      };
+      let minSubs = null, maxSubs = null;
+      const under = /(?:under|below|less than|upto|up to|max)\s*(\d+(?:\.\d+)?)\s*(k|lakh|lakhs|lac|m|million)?/.exec(raw);
+      const over = /(?:above|over|more than|at least|min|minimum)\s*(\d+(?:\.\d+)?)\s*(k|lakh|lakhs|lac|m|million)?/.exec(raw);
+      if (under) maxSubs = toNum(under[1], under[2]);
+      if (over) minSubs = toNum(over[1], over[2]);
+      if (has('nano')) { minSubs ??= 1000; maxSubs ??= 10000; }
+      if (has('micro') || has('small')) { minSubs ??= 10000; maxSubs ??= 100000; }
+      if (has('mid') || has('medium')) { minSubs ??= 100000; maxSubs ??= 500000; }
+      if (has('big') || has('large') || has('macro') || has('top')) { minSubs ??= 500000; }
+
+      const city = DISC_NL_CITIES.find(has);
+      const L = lang ? lang.name : (city || 'india');
+      let terms = [];
+      if (picked.length) {
+        const parenting = picked.find(t => t.genre === 'Parenting');
+        const other = picked.find(t => t.genre !== 'Parenting');
+        if (parenting && other) {
+          // e.g. "tamil moms who cook" -> mix both
+          terms.push(...(DISC_NL_WITH_KIDS[other.genre] || []).map(t => t.replace('{L}', L)));
+          terms.push(...parenting.terms.slice(0, 4).map(t => t.replace('{L}', L)));
+        } else {
+          picked.forEach(t => terms.push(...t.terms.map(x => x.replace('{L}', L))));
+        }
+        if (parenting && lang && DISC_NL_LOCAL_PARENTING[lang.code]) terms.push(...DISC_NL_LOCAL_PARENTING[lang.code]);
+      } else {
+        // Nothing recognised: use the meaningful words from the sentence as one search
+        const words = raw.split(' ').filter(w => w && !DISC_NL_STOP.has(w) && !/^\d/.test(w));
+        if (words.length) terms.push([...(lang && !words.includes(lang.name) ? [lang.name] : []), ...words].join(' '));
+      }
+      terms = [...new Set(terms.map(t => t.replace(/\s+/g, ' ').trim()))].slice(0, 8);
+
+      return {
+        lang: lang ? lang.code : '',
+        langName: lang ? lang.name.charAt(0).toUpperCase() + lang.name.slice(1) : '',
+        genre: picked[0]?.genre || '',
+        terms, minSubs, maxSubs,
+      };
+    }
+
+    function discRunSentence(text) {
+      const q = discParseSentence(text);
+      if (!q.terms.length) {
+        return discSetStatus('Could not understand that description. Try something like "Tamil moms with kids" or "Hindi cooking creators".', true);
+      }
+      const f = DISC.form;
+      f.sentence = text;
+      f.terms = q.terms.join('\n');
+      f.region = 'IN';
+      f.lang = q.lang;
+      if (q.minSubs != null) f.minSubs = String(Math.round(q.minSubs));
+      if (q.maxSubs != null) f.maxSubs = String(Math.round(q.maxSubs));
+      DISC.genre = q.genre;
+      DISC.lastPlan = q;
+      render();                       // show the filled-in search terms and filters
+      runDiscover();
+    }
+
     async function fetchDiscover() {
       if (!DISC.crmKeys) await loadDiscoverCrm();
     }
@@ -3682,10 +3820,28 @@
         )
       );
 
+      const sentenceInp = el('input', { type: 'text', value: f.sentence || '', placeholder: 'e.g. Tamil content creators who have kids, under 1 lakh subscribers',
+        class: 'flex-1 px-3 py-2.5 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 bg-white',
+        onkeydown: (e) => { if (e.key === 'Enter' && !DISC.running) discRunSentence(sentenceInp.value); } });
+      const plan = DISC.lastPlan;
+      const sentenceCard = el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4 mb-4' },
+        el('div', { class: 'text-sm font-medium text-stone-800 mb-2' }, 'Describe who you’re looking for'),
+        el('div', { class: 'flex flex-col sm:flex-row gap-2' },
+          sentenceInp,
+          el('button', { class: 'px-4 py-2.5 text-sm rounded-lg btn-brand whitespace-nowrap', disabled: DISC.running,
+            onClick: () => discRunSentence(sentenceInp.value) }, 'Find creators')
+        ),
+        plan ? el('p', { class: 'text-xs text-stone-500 mt-2' },
+          `Understood: ${plan.langName || 'any language'}, ${plan.genre || 'no specific topic'}` +
+          (plan.minSubs || plan.maxSubs ? `, ${plan.minSubs ? ytNum(plan.minSubs) : '0'} to ${plan.maxSubs ? ytNum(plan.maxSubs) : 'any'} subscribers` : '') +
+          `. Running ${plan.terms.length} searches, listed below. You can edit them and select Find channels to search again.`)
+          : el('p', { class: 'text-xs text-stone-500 mt-2' }, 'Mention a language or region, the kind of creator, and optionally a size like “under 50k”. Or type your own search terms in the advanced search below.')
+      );
+
       const termsBox = bind('terms', el('textarea', { rows: '3', class: inputCls + ' resize-y' }, f.terms));
       const searchCard = el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4 mb-4' },
         el('div', { class: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3' },
-          labelEl('Search terms (one per line, each is a separate search)', termsBox, 'sm:col-span-2'),
+          labelEl('Advanced: search terms (one per line, each is a separate search)', termsBox, 'sm:col-span-2'),
           labelEl('Region', mkSelect('region', [['IN', 'India'], ['US', 'United States'], ['GB', 'United Kingdom'], ['AE', 'UAE'], ['', 'Any']])),
           labelEl('Language', mkSelect('lang', [['', 'Any'], ['en', 'English'], ['hi', 'Hindi'], ['ta', 'Tamil'], ['te', 'Telugu'], ['kn', 'Kannada'], ['ml', 'Malayalam'], ['mr', 'Marathi'], ['bn', 'Bengali'], ['gu', 'Gujarati'], ['pa', 'Punjabi']])),
           labelEl('Channels per search term', mkSelect('perTerm', [['25', '25'], ['50', '50'], ['100', '100'], ['150', '150']])),
@@ -3752,7 +3908,7 @@
           el('h1', { class: 'text-xl font-semibold text-stone-900 tracking-tight' }, 'YouTube Discovery'),
           el('p', { class: 'text-sm text-stone-500 mt-1' }, 'Search YouTube channels by topic, compare average views on their latest videos, and add the right ones to the CRM.')
         ),
-        ytHasBuiltInKey() ? null : keyCard, searchCard, toolbar, results
+        ytHasBuiltInKey() ? null : keyCard, sentenceCard, searchCard, toolbar, results
       );
       // Fill the table and button states once the page is in the DOM
       setTimeout(() => { discRenderResults(); discSyncControls(); }, 0);
