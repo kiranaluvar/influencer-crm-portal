@@ -72,7 +72,7 @@
     const ALLOWED_DOMAIN = 'brightchamps.com';
     // YouTube Data API key for the YouTube Discovery page. Paste the key between the quotes.
     // Keep it restricted in Google Cloud to https://kiranaluvar.github.io/* and to YouTube Data API v3 only.
-    const YT_API_KEY = 'AIzaSyB_REs0bLElYFZLLy4oUJipnvxT3NIg9bs';
+    const YT_API_KEY = 'PASTE_YOUTUBE_API_KEY_HERE';
     const PAGE_SIZE = 25;
 
     const LANGUAGES = ['Hindi','English','Tamil','Telugu','Kannada','Malayalam','Marathi','Gujarati','Bengali','Punjabi','Urdu'];
@@ -3145,7 +3145,7 @@
       status: '', statusErr: false, progress: 0,
       crmKeys: null,            // Map normalized handle / channel id -> profile_id
       crmEmails: new Map(),     // email -> profile_id
-      filter: '', hideCrm: false, emailOnly: false,
+      filter: '', hideCrm: false, emailOnly: false, genre: '',
       sortKey: 'avg7', sortDir: -1,
     };
     const ytHasBuiltInKey = () => !!YT_API_KEY && YT_API_KEY !== 'PASTE_YOUTUBE_API_KEY_HERE';
@@ -3196,6 +3196,60 @@
       await Promise.all(workers);
     }
 
+    // Genre detection: keyword scoring on channel name, description, keywords and recent video titles,
+    // plus YouTube's own topic categories. Uses the CRM's nine genre options.
+    const DISC_GENRES = ['Parenting','Lifestyle','Travel','Infotainment','Cooking','Nutrition','Fitness','Gardening','DIY/Home Improvement'];
+    const DISC_GENRE_WORDS = {
+      'Parenting': ['mom','moms','mommy','mummy','mother','motherhood','momlife','parenting','parent','parents','baby','babies','toddler','toddlers','newborn','kids','kid','child','children','pregnancy','pregnant','family vlog','homeschool','homeschooling','maa','bachche','bacche','mom vlog','mom vlogger'],
+      'Lifestyle': ['lifestyle','daily vlog','vlog','vlogs','vlogger','beauty','makeup','fashion','skincare','day in my life','haul','routine','self care','minimalism'],
+      'Travel': ['travel','travels','traveller','traveler','travelling','traveling','trip','trips','tour','tourism','road trip','backpacking','destination','destinations','explore india'],
+      'Infotainment': ['facts','explained','knowledge','science','education','educational','general knowledge','gk','history','news','study','studies','learn','learning','documentary','tech','technology'],
+      'Cooking': ['recipe','recipes','cooking','cook','kitchen','food','foodie','rasoi','khana','baking','bake','tiffin','lunchbox','lunch box','snacks'],
+      'Nutrition': ['nutrition','nutritionist','dietitian','dietician','diet','healthy eating','healthy food','weight loss','protein','meal plan','calories','ayurveda'],
+      'Fitness': ['fitness','workout','workouts','gym','yoga','exercise','exercises','zumba','pilates','home workout','fit mom'],
+      'Gardening': ['garden','gardening','gardener','plants','plant care','terrace garden','balcony garden','kitchen garden','organic farming','houseplants'],
+      'DIY/Home Improvement': ['diy','craft','crafts','home decor','decor','interior','interiors','organisation','organization','organizing','makeover','handmade','home improvement','cleaning','renovation','upcycle'],
+    };
+    const DISC_TOPIC_GENRE = {
+      'Lifestyle_(sociology)': 'Lifestyle', 'Food': 'Cooking', 'Physical_fitness': 'Fitness', 'Tourism': 'Travel',
+      'Knowledge': 'Infotainment', 'Technology': 'Infotainment', 'Health': 'Nutrition',
+    };
+    const DISC_GENRE_RX = Object.fromEntries(Object.entries(DISC_GENRE_WORDS).map(([g, words]) =>
+      [g, new RegExp('(?:^|[^a-z0-9])(' + words.map(w => w.replace(/ /g, '\\s*')).join('|') + ')(?=$|[^a-z0-9])', 'gi')]));
+
+    function discDetectGenre({ title, description, keywords, videoTitles, topics }) {
+      const scores = Object.fromEntries(DISC_GENRES.map(g => [g, 0]));
+      const count = (text, rx) => (String(text || '').match(rx) || []).length;
+      for (const g of DISC_GENRES) {
+        const rx = DISC_GENRE_RX[g];
+        scores[g] += 4 * Math.min(2, count(title, rx));
+        scores[g] += 2 * Math.min(4, count(description, rx));
+        scores[g] += 2 * Math.min(3, count(keywords, rx));
+        scores[g] += Math.min(8, videoTitles.reduce((a, t) => a + (count(t, rx) ? 1 : 0), 0));
+      }
+      for (const url of topics || []) {
+        const g = DISC_TOPIC_GENRE[decodeURIComponent(String(url).split('/wiki/')[1] || '')];
+        if (g) scores[g] += 3;
+      }
+      // Generic words like "vlog" push Lifestyle up; let a specific genre win ties.
+      const ranked = DISC_GENRES.map(g => [g, scores[g] - (g === 'Lifestyle' ? 0.5 : 0)]).sort((a, b) => b[1] - a[1]);
+      const [top, topScore] = ranked[0];
+      if (topScore < 3) return { genre: '', also: [] };
+      const also = ranked.slice(1).filter(([, sc]) => sc >= 3 && sc >= topScore * 0.5).slice(0, 2).map(([g]) => g);
+      return { genre: top, also };
+    }
+
+    const DISC_LANG_NAMES = { hi: 'Hindi', en: 'English', ta: 'Tamil', te: 'Telugu', kn: 'Kannada', ml: 'Malayalam', mr: 'Marathi', bn: 'Bengali', gu: 'Gujarati', pa: 'Punjabi', ur: 'Urdu', or: 'Odia', as: 'Assamese', ar: 'Arabic', es: 'Spanish', fr: 'French' };
+    const discLangName = (code) => {
+      const c = String(code || '').toLowerCase().split('-')[0];
+      return c && c !== 'zxx' && c !== 'und' ? (DISC_LANG_NAMES[c] || c.toUpperCase()) : '';
+    };
+    const discFmtLen = (secs) => {
+      if (!secs) return '—';
+      const m = Math.round(secs / 60);
+      return m < 1 ? `${Math.round(secs)} sec` : m >= 60 ? `${Math.floor(m / 60)} hr ${m % 60} min` : `${m} min`;
+    };
+
     const discNormHandle = (h) => String(h || '').trim().toLowerCase().replace(/^@/, '');
 
     async function loadDiscoverCrm() {
@@ -3215,18 +3269,28 @@
     }
 
     async function loadDiscoverCrmEmails() {
-      const emails = [...new Set(DISC.results.flatMap(r => r.emails))].filter(e => !DISC.crmEmails.has(e));
-      for (let i = 0; i < emails.length; i += 100) {
-        const { data, error } = await supabase.from('profiles').select('id, email').in('email', emails.slice(i, i + 100));
-        if (error) { console.error(error); break; }
-        (data || []).forEach(p => p.email && DISC.crmEmails.set(p.email.toLowerCase(), p.id));
+      // Case-insensitive match against profiles.email (CRM rows may have capitals or stray spaces).
+      const emails = [...new Set(DISC.results.flatMap(r => r.emails))]
+        .filter(e => !DISC.crmEmails.has(e) && !/["\\,()]/.test(e));
+      for (let i = 0; i < emails.length; i += 30) {
+        const chunk = emails.slice(i, i + 30);
+        const orFilter = chunk.map(e => `email.ilike."*${e}*"`).join(',');
+        const { data, error } = await supabase.from('profiles').select('id, email').or(orFilter);
+        if (error) { console.error(error); continue; }
+        (data || []).forEach(p => {
+          const stored = String(p.email || '').trim().toLowerCase();
+          if (chunk.includes(stored)) DISC.crmEmails.set(stored, p.id);
+        });
       }
     }
 
     function discMarkCrm() {
       for (const r of DISC.results) {
-        r.crmProfileId = (DISC.crmKeys && (DISC.crmKeys.get(discNormHandle(r.handle)) || DISC.crmKeys.get(r.id.toLowerCase())))
-          || r.emails.map(e => DISC.crmEmails.get(e)).find(Boolean) || null;
+        const byEmail = r.emails.map(e => DISC.crmEmails.get(e)).find(Boolean) || null;
+        const byChannel = (DISC.crmKeys && (DISC.crmKeys.get(discNormHandle(r.handle)) || DISC.crmKeys.get(r.id.toLowerCase()))) || null;
+        if (r.crmMatch === 'added') continue;
+        r.crmProfileId = byEmail || byChannel;
+        r.crmMatch = byEmail && byChannel ? 'email + channel' : byEmail ? 'email' : byChannel ? 'channel' : '';
       }
     }
 
@@ -3297,7 +3361,7 @@
         let channels = [];
         for (let i = 0; i < ids.length && !DISC.stop; i += 50) {
           discSetStatus(`Loading channel details… ${Math.min(i + 50, ids.length)} / ${ids.length}`);
-          const data = await ytCall('channels', { part: 'snippet,statistics,contentDetails,brandingSettings', id: ids.slice(i, i + 50).join(','), maxResults: 50 }, 1);
+          const data = await ytCall('channels', { part: 'snippet,statistics,contentDetails,brandingSettings,topicDetails,status', id: ids.slice(i, i + 50).join(','), maxResults: 50 }, 1);
           channels.push(...(data.items || []));
           discSetProgress(25 + 10 * Math.min(1, (i + 50) / ids.length));
         }
@@ -3319,7 +3383,7 @@
             const pl = await ytCall('playlistItems', { part: 'contentDetails', playlistId: uploads, maxResults: f.longOnly ? 30 : 10 }, 1);
             const vids = (pl.items || []).map(v => v.contentDetails.videoId);
             if (!vids.length) return;
-            const vd = await ytCall('videos', { part: 'statistics,contentDetails,snippet', id: vids.join(','), maxResults: 50 }, 1);
+            const vd = await ytCall('videos', { part: 'statistics,contentDetails,snippet,status', id: vids.join(','), maxResults: 50 }, 1);
             const videos = (vd.items || [])
               .filter(v => v.snippet?.liveBroadcastContent === 'none')
               .map(v => ({
@@ -3329,6 +3393,10 @@
                 likes: +v.statistics?.likeCount || 0,
                 comments: +v.statistics?.commentCount || 0,
                 desc: v.snippet?.description || '',
+                title: v.snippet?.title || '',
+                id: v.id,
+                lang: v.snippet?.defaultAudioLanguage || v.snippet?.defaultLanguage || '',
+                kids: !!v.status?.madeForKids,
               }))
               .sort((a, b) => new Date(b.published) - new Date(a.published));
 
@@ -3341,6 +3409,29 @@
             const v7 = recent.reduce((a, v) => a + v.views, 0);
             const e7 = recent.reduce((a, v) => a + v.likes + v.comments, 0);
 
+            // Insights (all from data already loaded; no extra quota)
+            const sortedViews = recent.map(v => v.views).sort((a, b) => a - b);
+            const median7 = sortedViews.length
+              ? (sortedViews.length % 2 ? sortedViews[(sortedViews.length - 1) / 2]
+                 : Math.round((sortedViews[sortedViews.length / 2 - 1] + sortedViews[sortedViews.length / 2]) / 2))
+              : null;
+            const avg7v = avgOf(recent);
+            const spiky = recent.length >= 3 && median7 != null && avg7v > 1.8 * Math.max(1, median7);
+            const avgLikes = recent.length ? Math.round(recent.reduce((a, v) => a + v.likes, 0) / recent.length) : null;
+            const avgComments = recent.length ? Math.round(recent.reduce((a, v) => a + v.comments, 0) / recent.length) : null;
+            const avgLenSecs = recent.length ? Math.round(recent.reduce((a, v) => a + v.secs, 0) / recent.length) : null;
+            let uploadsPerMonth = null;
+            if (videos.length >= 2) {
+              const spanDays = (new Date(videos[0].published) - new Date(videos[videos.length - 1].published)) / 86400000;
+              uploadsPerMonth = spanDays > 0 ? +Math.min(99, (videos.length - 1) / spanDays * 30).toFixed(1) : null;
+            }
+            const best = recent.reduce((b, v) => (!b || v.views > b.views) ? v : b, null);
+            const langCounts = {};
+            videos.forEach(v => { const n = discLangName(v.lang); if (n) langCounts[n] = (langCounts[n] || 0) + 1; });
+            const language = Object.entries(langCounts).sort((a, b) => b[1] - a[1])[0]?.[0]
+              || discLangName(c.brandingSettings?.channel?.defaultLanguage || c.snippet?.defaultLanguage);
+            const madeForKids = !!c.status?.madeForKids || (videos.length > 0 && videos.filter(v => v.kids).length / videos.length >= 0.5);
+
             const sn = c.snippet || {};
             const desc = sn.description || '';
             const chan = ytExtractContacts(desc + ' ' + (c.brandingSettings?.channel?.keywords || ''));
@@ -3348,10 +3439,18 @@
             const vidOnly = vidc.emails.filter(e => !chan.emails.includes(e));
             const emailSource = chan.emails.length ? (vidOnly.length ? 'channel + videos' : 'channel description') : (vidOnly.length ? 'video descriptions' : '');
             const handle = sn.customUrl || '';
+            const g = discDetectGenre({
+              title: sn.title, description: desc,
+              keywords: c.brandingSettings?.channel?.keywords || '',
+              videoTitles: videos.slice(0, 15).map(v => v.title),
+              topics: c.topicDetails?.topicCategories || [],
+            });
 
             DISC.results.push({
               id: c.id,
               title: sn.title || '',
+              genre: g.genre,
+              genreAlso: g.also,
               handle,
               link: handle ? `https://www.youtube.com/${handle}` : `https://www.youtube.com/channel/${c.id}`,
               thumb: sn.thumbnails?.default?.url || '',
@@ -3374,6 +3473,10 @@
               lastUpload,
               terms: [...(found.get(c.id) || [])],
               crmProfileId: null,
+              median7, spiky, avgLikes, avgComments, avgLenSecs, uploadsPerMonth, language, madeForKids,
+              viewsToSubs: (avg7v != null && c.statistics?.subscriberCount > 0 && !c.statistics?.hiddenSubscriberCount)
+                ? +(100 * avg7v / +c.statistics.subscriberCount).toFixed(1) : null,
+              best: best ? { title: best.title, views: best.views, url: `https://www.youtube.com/watch?v=${best.id}` } : null,
             });
           } catch (e) {
             if (e.fatal) { DISC.stop = true; discSetStatus(e.message, true); }
@@ -3406,6 +3509,8 @@
       return DISC.results.filter(r => {
         if (DISC.hideCrm && r.crmProfileId) return false;
         if (DISC.emailOnly && !r.emails.length) return false;
+        if (DISC.genre === '__none' && r.genre) return false;
+        if (DISC.genre && DISC.genre !== '__none' && r.genre !== DISC.genre && !r.genreAlso.includes(DISC.genre)) return false;
         if (q && !(`${r.title} ${r.handle} ${r.description}`.toLowerCase().includes(q))) return false;
         return true;
       }).sort((a, b) => {
@@ -3427,11 +3532,13 @@
           platform: 'Youtube',
           username: r.handle || r.title,
           link: r.link,
+          genre: r.genre || '',
           avg_views: r.avg7 ?? '',
           followers: r.subs ?? '',
         },
         onSaved: (prof) => {
           r.crmProfileId = prof?.id || true;
+          r.crmMatch = 'added';
           if (DISC.crmKeys) {
             if (r.handle) DISC.crmKeys.set(discNormHandle(r.handle), prof?.id);
             DISC.crmKeys.set(r.id.toLowerCase(), prof?.id);
@@ -3443,13 +3550,18 @@
 
     function discDownloadCsv() {
       const cols = [
-        ['Channel name', 'title'], ['Channel link', 'link'], ['Handle', 'handle'], ['Channel ID', 'id'],
-        ['Subscribers', 'subs'], ['Avg views last 3', 'avg3'], ['Avg views last 7', 'avg7'], ['Videos used for avg', 'n7'],
+        ['Channel name', 'title'], ['Genre', 'genre'], ['Other genres', r => (r.genreAlso || []).join('; ')], ['Channel link', 'link'], ['Handle', 'handle'], ['Channel ID', 'id'],
+        ['Subscribers', 'subs'], ['Avg views last 3', 'avg3'], ['Avg views last 7', 'avg7'], ['Videos used for avg', 'n7'], ['Median views last 7', 'median7'],
+        ['One video inflating avg', r => r.spiky ? 'Yes' : 'No'], ['Views ÷ subscribers %', 'viewsToSubs'],
+        ['Avg likes last 7', 'avgLikes'], ['Avg comments last 7', 'avgComments'],
+        ['Uploads per month', 'uploadsPerMonth'], ['Avg video length (min)', r => r.avgLenSecs ? Math.round(r.avgLenSecs / 60) : ''],
+        ['Language', 'language'], ['Made for kids', r => r.madeForKids ? 'Yes' : 'No'],
+        ['Best recent video', r => r.best ? r.best.title : ''], ['Best video views', r => r.best ? r.best.views : ''], ['Best video link', r => r.best ? r.best.url : ''],
         ['Engagement % last 7', 'er7'], ['Uploads last 30 days', 'uploads30'], ['Last upload', r => (r.lastUpload || '').slice(0, 10)],
         ['Total views', 'totalViews'], ['Total videos', 'videoCount'], ['Country', 'country'], ['Channel created', r => (r.joined || '').slice(0, 10)],
         ['Emails', r => r.emails.join('; ')], ['Email source', 'emailSource'], ['Instagram', r => r.instagram.map(h => '@' + h).join('; ')],
         ['Link-in-bio', r => r.bio.join('; ')], ['Mostly Shorts', r => r.shortsShare >= 0.7 ? 'Yes' : 'No'],
-        ['Already in CRM', r => r.crmProfileId ? 'Yes' : 'No'], ['Matched search terms', r => r.terms.join('; ')], ['Description', 'description'],
+        ['Already in CRM', r => r.crmProfileId ? 'Yes' : 'No'], ['CRM match by', r => r.crmMatch || ''], ['Matched search terms', r => r.terms.join('; ')], ['Description', 'description'],
       ];
       const cell = v => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
       const lines = [cols.map(c => c[0]).join(',')].concat(
@@ -3471,8 +3583,11 @@
       discSyncControls();
 
       const cols = [
-        ['title', 'Channel', ''], ['subs', 'Subscribers', 'r'], ['avg3', 'Avg views (last 3)', 'r'], ['avg7', 'Avg views (last 7)', 'r'],
-        ['er7', 'Engagement (last 7)', 'r'], ['uploads30', 'Uploads (30 days)', 'r'], ['lastUpload', 'Last upload', ''],
+        ['title', 'Channel', ''], ['genre', 'Genre', ''], ['subs', 'Subscribers', 'r'], ['avg3', 'Avg views (last 3)', 'r'], ['avg7', 'Avg views (last 7)', 'r'],
+        ['median7', 'Median views (last 7)', 'r'], ['viewsToSubs', 'Views ÷ subscribers', 'r'],
+        ['er7', 'Engagement (last 7)', 'r'], ['avgLikes', 'Avg likes / comments', 'r'],
+        ['uploadsPerMonth', 'Uploads / month', 'r'], ['avgLenSecs', 'Avg length', 'r'], ['language', 'Language', ''],
+        ['lastUpload', 'Last upload', ''], [null, 'Best recent video', ''],
         ['totalViews', 'Total views', 'r'], ['videoCount', 'Videos', 'r'], ['country', 'Country', ''],
         [null, 'Email / Instagram', ''], [null, 'Description', ''], [null, '', ''],
       ];
@@ -3496,7 +3611,7 @@
           ].join('');
           const action = r.crmProfileId
             ? (typeof r.crmProfileId === 'string'
-                ? `<a href="#profiles/${escape(r.crmProfileId)}" class="badge bg-emerald-50 text-emerald-700 whitespace-nowrap">In CRM · view</a>`
+                ? `<a href="#profiles/${escape(r.crmProfileId)}" class="badge bg-emerald-50 text-emerald-700 whitespace-nowrap">In CRM · view</a>${r.crmMatch && r.crmMatch !== 'added' ? `<div class="text-[11px] text-stone-400 mt-1 whitespace-nowrap">matched by ${escape(r.crmMatch)}</div>` : ''}`
                 : `<span class="badge bg-emerald-50 text-emerald-700 whitespace-nowrap">In CRM</span>`)
             : `<button data-add="${escape(r.id)}" class="px-2.5 py-1 text-xs rounded-lg btn-brand whitespace-nowrap">+ Add to CRM</button>`;
           return `<tr class="border-b border-stone-100 hover:bg-stone-50/60 align-top">
@@ -3506,13 +3621,25 @@
                 <a href="${escape(r.link)}" target="_blank" rel="noopener" class="font-medium text-stone-900 hover:underline">${escape(r.title)}</a>
                 <div class="text-xs text-stone-500">${escape(r.handle || r.id)}</div>
                 ${r.shortsShare >= 0.7 ? '<span class="badge bg-amber-50 text-amber-700 mt-1">Mostly Shorts</span>' : ''}
+                ${r.madeForKids ? '<span class="badge bg-rose-50 text-rose-700 mt-1" title="YouTube marks this content as made for kids: comments are off and targeted ads are blocked">Made for kids</span>' : ''}
               </div></div></td>
+            <td class="px-3 py-2.5 whitespace-nowrap">${r.genre
+                ? `<span class="badge bg-indigo-50 text-indigo-700">${escape(r.genre)}</span>${r.genreAlso.length ? `<div class="text-[11px] text-stone-400 mt-1">also ${escape(r.genreAlso.join(', '))}</div>` : ''}`
+                : '<span class="text-stone-400 text-xs">Not sure</span>'}</td>
             <td class="px-3 py-2.5 text-right tabular-nums">${r.subs == null ? '<span class="text-stone-400">Hidden</span>' : ytNum(r.subs)}</td>
             <td class="px-3 py-2.5 text-right tabular-nums">${ytNum(r.avg3)}</td>
             <td class="px-3 py-2.5 text-right tabular-nums">${ytNum(r.avg7)}${r.n7 && r.n7 < 7 ? `<div class="text-[11px] text-stone-400">from ${r.n7} videos</div>` : ''}</td>
+            <td class="px-3 py-2.5 text-right tabular-nums">${ytNum(r.median7)}${r.spiky ? '<div><span class="badge bg-amber-50 text-amber-700 mt-1 whitespace-nowrap" title="One video is pulling the average up; the median is the more realistic number">One video inflating avg</span></div>' : ''}</td>
+            <td class="px-3 py-2.5 text-right tabular-nums">${r.viewsToSubs == null ? '—' : `<span class="${r.viewsToSubs >= 20 ? 'text-emerald-700 font-medium' : r.viewsToSubs < 5 ? 'text-rose-600' : ''}">${r.viewsToSubs}%</span>`}</td>
             <td class="px-3 py-2.5 text-right tabular-nums">${r.er7 == null ? '—' : r.er7 + '%'}</td>
-            <td class="px-3 py-2.5 text-right tabular-nums">${r.uploads30}</td>
+            <td class="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">${ytNum(r.avgLikes)} <span class="text-stone-400">/</span> ${ytNum(r.avgComments)}</td>
+            <td class="px-3 py-2.5 text-right tabular-nums">${r.uploadsPerMonth == null ? '—' : r.uploadsPerMonth}</td>
+            <td class="px-3 py-2.5 text-right whitespace-nowrap">${discFmtLen(r.avgLenSecs)}</td>
+            <td class="px-3 py-2.5 whitespace-nowrap">${escape(r.language || '—')}</td>
             <td class="px-3 py-2.5 whitespace-nowrap">${fmtDate(r.lastUpload)}</td>
+            <td class="px-3 py-2.5 text-xs max-w-[240px]">${r.best
+                ? `<a href="${escape(r.best.url)}" target="_blank" rel="noopener" class="text-brand hover:underline line-clamp-2">${escape(r.best.title)}</a><div class="text-[11px] text-stone-400 mt-0.5">${ytNum(r.best.views)} views</div>`
+                : '—'}</td>
             <td class="px-3 py-2.5 text-right tabular-nums">${ytNum(r.totalViews)}</td>
             <td class="px-3 py-2.5 text-right tabular-nums">${ytNum(r.videoCount)}</td>
             <td class="px-3 py-2.5">${escape(r.country || '—')}</td>
@@ -3524,7 +3651,7 @@
         }).join('');
       }
       host.innerHTML = `<div class="overflow-x-auto scrollbar-thin bg-white border border-stone-200 rounded-xl">
-        <table class="w-full min-w-[1350px] text-sm"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
+        <table class="w-full min-w-[2100px] text-sm"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
     }
 
     function viewDiscover() {
@@ -3588,7 +3715,14 @@
         return el('label', { class: 'inline-flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer' }, cb, text);
       };
       const toolbar = el('div', { class: 'flex flex-wrap items-center gap-3 mb-3' },
-        filterInp, toggle('hideCrm', 'Hide channels already in CRM'), toggle('emailOnly', 'Only with email'),
+        filterInp,
+        el('select', { class: 'px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 bg-white',
+          onchange: (e) => { DISC.genre = e.target.value; discRenderResults(); } },
+          el('option', { value: '', selected: DISC.genre === '' }, 'All genres'),
+          ...DISC_GENRES.map(g => el('option', { value: g, selected: DISC.genre === g }, g)),
+          el('option', { value: '__none', selected: DISC.genre === '__none' }, 'Genre not detected')
+        ),
+        toggle('hideCrm', 'Hide channels already in CRM'), toggle('emailOnly', 'Only with email'),
         el('span', { id: 'disc-count', class: 'text-sm text-stone-500' }),
         el('div', { class: 'flex-1' }),
         el('button', { id: 'disc-csv', class: 'px-3 py-2 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-50', onClick: discDownloadCsv }, '⬇ Download CSV')
@@ -3600,7 +3734,7 @@
         if (sortTh) {
           const k = sortTh.dataset.sort;
           if (DISC.sortKey === k) DISC.sortDir *= -1;
-          else { DISC.sortKey = k; DISC.sortDir = (k === 'title' || k === 'country') ? 1 : -1; }
+          else { DISC.sortKey = k; DISC.sortDir = (k === 'title' || k === 'country' || k === 'genre' || k === 'language') ? 1 : -1; }
           return discRenderResults();
         }
         const addBtn = e.target.closest('button[data-add]');
