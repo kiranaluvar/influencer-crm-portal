@@ -72,7 +72,7 @@
     const ALLOWED_DOMAIN = 'brightchamps.com';
     // YouTube Data API key for the YouTube Discovery page. Paste the key between the quotes.
     // Keep it restricted in Google Cloud to https://kiranaluvar.github.io/* and to YouTube Data API v3 only.
-    const YT_API_KEY = 'AIzaSyB_REs0bLElYFZLLy4oUJipnvxT3NIg9bs';
+    const YT_API_KEY = 'PASTE_YOUTUBE_API_KEY_HERE';
     const PAGE_SIZE = 25;
 
     const LANGUAGES = ['Hindi','English','Tamil','Telugu','Kannada','Malayalam','Marathi','Gujarati','Bengali','Punjabi','Urdu'];
@@ -3145,7 +3145,7 @@
       status: '', statusErr: false, progress: 0,
       crmKeys: null,            // Map normalized handle / channel id -> profile_id
       crmEmails: new Map(),     // email -> profile_id
-      filter: '', hideCrm: false, emailOnly: false, locOnly: false, indianOnly: false, genre: '',
+      filter: '', hideCrm: false, emailOnly: false, locOnly: false, indianOnly: false, basedOnly: false, hideKids: true, genre: '',
       sortKey: 'avg7', sortDir: -1,
     };
     const ytHasBuiltInKey = () => !!YT_API_KEY && YT_API_KEY !== 'PASTE_YOUTUBE_API_KEY_HERE';
@@ -3322,6 +3322,17 @@
       if (words.length) reasons.push('mentions ' + words.slice(0, 4).join(', '));
       return { indian: strong || words.length >= 2, reasons };
     }
+
+    // Where is the creator based, compared with the chosen Region?
+    // 'yes' = channel country matches, 'likely' = country not set but the channel mentions the place,
+    // 'no' = channel country is somewhere else, 'unknown' = no country and no mention, null = no region chosen.
+    function discBased(r) {
+      const reg = DISC.form.region;
+      if (!reg) return null;
+      if (r.country) return r.country === reg ? 'yes' : 'no';
+      return r.locHit ? 'likely' : 'unknown';
+    }
+    const discCountryName = (code) => YT_COUNTRY_NAMES[code] || code || '';
 
     const discNormHandle = (h) => String(h || '').trim().toLowerCase().replace(/^@/, '');
 
@@ -3564,7 +3575,9 @@
         region: country ? country.code : '',
         countryLabel: country ? country.label : '',
         placeLabel: place && !place.langState ? place.label : '',
-        locWords: place && !place.langState ? place.words : (abroad ? abroad.words : []),
+        // For a country, a mention of any of its states/cities also counts (e.g. "usa" matches a channel saying "Texas")
+        locWords: place && !place.langState ? place.words
+          : (abroad ? [...abroad.words, ...DISC_NL_PLACES.filter(p => p.c === abroad.code).flatMap(p => p.words)] : []),
         wantIndian: !!abroad && (!!lang || has('indian') || has('india') || has('desi') || has('nri')),
         lang: lang ? lang.code : '',
         langName: lang ? lang.name.charAt(0).toUpperCase() + lang.name.slice(1) : '',
@@ -3590,6 +3603,7 @@
       DISC.genre = q.genre;
       DISC.lastPlan = q;
       DISC.indianOnly = q.wantIndian;   // abroad + Indian: hide non-Indian creators by default
+      DISC.basedOnly = !!(q.region && q.region !== 'IN');  // "in usa" means they live there, not just popular there
       render();                       // show the filled-in search terms and filters
       runDiscover();
     }
@@ -3896,6 +3910,8 @@
         if (DISC.emailOnly && !r.emails.length) return false;
         if (DISC.locOnly && r.locHit === false) return false;
         if (DISC.indianOnly && !r.indian) return false;
+        if (DISC.hideKids && r.madeForKids) return false;
+        if (DISC.basedOnly) { const b = discBased(r); if (b === 'no' || b === 'unknown') return false; }
         if (DISC.genre === '__none' && r.genre) return false;
         if (DISC.genre && DISC.genre !== '__none' && r.genre !== DISC.genre && !r.genreAlso.includes(DISC.genre)) return false;
         if (q && !(`${r.title} ${r.handle} ${r.description}`.toLowerCase().includes(q))) return false;
@@ -3948,6 +3964,7 @@
         ['Total views', 'totalViews'], ['Total videos', 'videoCount'], ['Country', 'country'], ['Channel created', r => (r.joined || '').slice(0, 10)],
         ['Emails', r => r.emails.join('; ')], ['Email source', 'emailSource'], ['Instagram', r => r.instagram.map(h => '@' + h).join('; ')],
         ['Link-in-bio', r => r.bio.join('; ')], ['Mostly Shorts', r => r.shortsShare >= 0.7 ? 'Yes' : 'No'],
+        ['Based in chosen region', r => ({ yes: 'Yes', likely: 'Probably (mentions it)', no: 'No', unknown: 'Unknown' })[discBased(r)] || ''],
         ['Indian creator', r => r.indian ? 'Yes' : 'No'], ['Indian signals', 'indianWhy'],
         ['Location checked', 'locLabel'], ['Mentions location', r => r.locHit == null ? '' : (r.locHit ? 'Yes' : 'No')],
         ['Already in CRM', r => r.crmProfileId ? 'Yes' : 'No'], ['CRM match by', r => r.crmMatch || ''], ['Matched search terms', r => r.terms.join('; ')], ['Description', 'description'],
@@ -4011,6 +4028,13 @@
                 <div class="text-xs text-stone-500">${escape(r.handle || r.id)}</div>
                 ${r.shortsShare >= 0.7 ? '<span class="badge bg-amber-50 text-amber-700 mt-1">Mostly Shorts</span>' : ''}
                 ${r.locHit ? `<span class="badge bg-emerald-50 text-emerald-700 mt-1">Mentions ${escape(r.locLabel)}</span>` : ''}
+                ${(() => {
+                  const b = discBased(r), reg = discCountryName(DISC.form.region);
+                  if (b === 'yes') return `<span class="badge bg-emerald-50 text-emerald-700 mt-1" title="Channel country is set to ${escape(reg)}">Based in ${escape(reg)}</span>`;
+                  if (b === 'likely') return `<span class="badge bg-emerald-50 text-emerald-700 mt-1" title="No country set on the channel, but it mentions ${escape(r.locLabel || reg)}">Probably in ${escape(reg)}</span>`;
+                  if (b === 'no') return `<span class="badge bg-stone-100 text-stone-600 mt-1" title="Channel country on YouTube">Based in ${escape(discCountryName(r.country))}</span>`;
+                  return '';
+                })()}
                 ${r.indian ? `<span class="badge bg-sky-50 text-sky-700 mt-1" title="${escape(r.indianWhy)}">Indian creator</span>` : ''}
                 ${r.madeForKids ? '<span class="badge bg-rose-50 text-rose-700 mt-1" title="YouTube marks this content as made for kids: comments are off and targeted ads are blocked">Made for kids</span>' : ''}
               </div></div></td>
@@ -4140,6 +4164,8 @@
         toggle('hideCrm', 'Hide channels already in CRM'), toggle('emailOnly', 'Only with email'),
         toggle('locOnly', 'Only channels that mention the location'),
         toggle('indianOnly', 'Only Indian creators'),
+        toggle('basedOnly', 'Only creators based in the chosen region'),
+        toggle('hideKids', 'Hide “Made for kids” channels'),
         el('span', { id: 'disc-count', class: 'text-sm text-stone-500' }),
         el('div', { class: 'flex-1' }),
         el('button', { id: 'disc-csv', class: 'px-3 py-2 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-50', onClick: discDownloadCsv }, '⬇ Download CSV')
