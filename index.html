@@ -3164,13 +3164,46 @@
       if (!res.ok) {
         const reason = data?.error?.errors?.[0]?.reason || '';
         let msg = data?.error?.message || res.statusText;
-        if (reason === 'quotaExceeded') msg = 'Daily YouTube API quota used up. It resets at 12:30 PM IST.';
+        if (['quotaExceeded', 'dailyLimitExceeded', 'rateLimitExceeded'].includes(reason) || /quota/i.test(msg)) {
+          msg = /search/i.test(msg)
+            ? 'YouTube’s daily search limit for the team is used up. It resets at 12:30 PM IST (1:30 PM IST from November to March). Searches already run in the last 3 days still work from saved results.'
+            : 'YouTube’s daily API limit for the team is used up. It resets at 12:30 PM IST (1:30 PM IST from November to March).';
+        }
         else if (reason === 'keyInvalid' || /API key not valid/i.test(msg)) msg = 'The YouTube API key is not valid. Check it in Google Cloud Console → Credentials.';
         else if (/referer|referrer/i.test(msg)) msg = 'The API key is restricted to other websites. Add this site under Application restrictions in Google Cloud.';
         const e = new Error(msg);
-        e.fatal = res.status === 403 || res.status === 400 || reason === 'quotaExceeded';
+        e.fatal = res.status === 403 || res.status === 400 || res.status === 429 || /quota|limit/i.test(msg);
         throw e;
       }
+      return data;
+    }
+
+    // Saved search results (per browser, 3 days) so repeating a search costs nothing.
+    const YT_CACHE_LS = 'bc_yt_search_cache_v1';
+    const YT_CACHE_TTL = 3 * 86400000;
+    function ytCacheGet(key) {
+      try {
+        const all = JSON.parse(localStorage.getItem(YT_CACHE_LS) || '{}');
+        const hit = all[key];
+        return hit && Date.now() - hit.t < YT_CACHE_TTL ? hit.d : null;
+      } catch { return null; }
+    }
+    function ytCacheSet(key, data) {
+      try {
+        const all = JSON.parse(localStorage.getItem(YT_CACHE_LS) || '{}');
+        all[key] = { t: Date.now(), d: data };
+        const keys = Object.keys(all).filter(k => Date.now() - all[k].t < YT_CACHE_TTL)
+          .sort((a, b) => all[b].t - all[a].t).slice(0, 400);
+        localStorage.setItem(YT_CACHE_LS, JSON.stringify(Object.fromEntries(keys.map(k => [k, all[k]]))));
+      } catch { /* storage full or blocked: skip caching */ }
+    }
+    async function ytSearchCached(params) {
+      const key = JSON.stringify([params.q.toLowerCase().trim(), params.regionCode || '', params.relevanceLanguage || '', params.maxResults, params.pageToken || '']);
+      const cached = ytCacheGet(key);
+      if (cached) { DISC.cacheHits = (DISC.cacheHits || 0) + 1; return cached; }
+      const slim = await ytCall('search', params, 100);
+      const data = { items: (slim.items || []).map(it => ({ id: { channelId: it.id?.channelId }, snippet: { channelId: it.snippet?.channelId } })), nextPageToken: slim.nextPageToken || '' };
+      ytCacheSet(key, data);
       return data;
     }
 
@@ -3576,7 +3609,7 @@
       const maxSubs = f.maxSubs ? +f.maxSubs : Infinity;
       const activeDays = +f.activeDays || 0;
 
-      DISC.running = true; DISC.stop = false; DISC.quota = 0; DISC.results = [];
+      DISC.running = true; DISC.stop = false; DISC.quota = 0; DISC.results = []; DISC.cacheHits = 0;
       discSyncControls(); discRenderResults(); discSetProgress(2);
 
       try {
@@ -3592,7 +3625,7 @@
             if (f.region) params.regionCode = f.region;
             if (f.lang) params.relevanceLanguage = f.lang;
             if (pageToken) params.pageToken = pageToken;
-            const data = await ytCall('search', params, 100);
+            const data = await ytSearchCached(params);
             for (const it of data.items || []) {
               const id = it.snippet?.channelId || it.id?.channelId;
               if (!id) continue;
@@ -3761,7 +3794,8 @@
         await loadDiscoverCrmEmails();
         discMarkCrm();
         discSetProgress(100);
-        if (!DISC.statusErr) discSetStatus(`${DISC.stop ? 'Stopped. ' : ''}${DISC.results.length} channels ready. About ${ytNum(DISC.quota)} of your 10,000 daily API units used.`);
+        if (!DISC.statusErr) discSetStatus(`${DISC.stop ? 'Stopped. ' : ''}${DISC.results.length} channels ready. About ${ytNum(DISC.quota)} of your 10,000 daily API units used` +
+          (DISC.cacheHits ? ` (${DISC.cacheHits} search${DISC.cacheHits > 1 ? 'es' : ''} reused from saved results for free).` : '.'));
       } catch (e) {
         discSetStatus(e.message, true);
       } finally {
