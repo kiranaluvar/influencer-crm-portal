@@ -3160,14 +3160,15 @@
       const url = YT_API + endpoint + '?' + new URLSearchParams({ ...params, key: ytGetKey() });
       const res = await fetch(url);
       DISC.quota += cost;
+      DISC.pendingUnits = (DISC.pendingUnits || 0) + cost;
+      if (endpoint === 'search') DISC.pendingSearches = (DISC.pendingSearches || 0) + 1;
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const reason = data?.error?.errors?.[0]?.reason || '';
         let msg = data?.error?.message || res.statusText;
         if (['quotaExceeded', 'dailyLimitExceeded', 'rateLimitExceeded'].includes(reason) || /quota/i.test(msg)) {
-          msg = /search/i.test(msg)
-            ? 'YouTube’s daily search limit for the team is used up. It resets at 12:30 PM IST (1:30 PM IST from November to March). Searches already run in the last 3 days still work from saved results.'
-            : 'YouTube’s daily API limit for the team is used up. It resets at 12:30 PM IST (1:30 PM IST from November to March).';
+          DISC.usageExhausted = true; discRenderUsage();
+          msg = `Today’s YouTube search limit is used up. You can search again after ${ytResetText()}. Searches already done in the last 3 days still work.`;
         }
         else if (reason === 'keyInvalid' || /API key not valid/i.test(msg)) msg = 'The YouTube API key is not valid. Check it in Google Cloud Console → Credentials.';
         else if (/referer|referrer/i.test(msg)) msg = 'The API key is restricted to other websites. Add this site under Application restrictions in Google Cloud.';
@@ -3176,6 +3177,22 @@
         throw e;
       }
       return data;
+    }
+
+    // YouTube's daily limit resets at midnight US Pacific time. Show that in the viewer's own time,
+    // e.g. "12:30 PM today (in 2 hr 15 min)".
+    function ytResetText() {
+      const now = new Date();
+      const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Los_Angeles', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit',
+      }).formatToParts(now).map(p => [p.type, p.value]));
+      const sinceMidnight = ((+parts.hour % 24) * 3600 + (+parts.minute) * 60 + (+parts.second)) * 1000;
+      const reset = new Date(now.getTime() - sinceMidnight + 86400000);
+      const time = reset.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase();
+      const sameDay = reset.toDateString() === now.toDateString();
+      const mins = Math.max(1, Math.round((reset - now) / 60000));
+      const wait = mins >= 60 ? `${Math.floor(mins / 60)} hr ${mins % 60} min` : `${mins} min`;
+      return `${time} ${sameDay ? 'today' : 'tomorrow'} (in ${wait})`;
     }
 
     // Saved search results (per browser, 3 days) so repeating a search costs nothing.
@@ -3577,8 +3594,72 @@
       runDiscover();
     }
 
+
+    // ---------------------------------------------------------------
+    // Team-wide daily usage meter (stored in Supabase table yt_api_usage).
+    // YouTube does not report remaining quota, so the CRM counts every call it makes.
+    // ---------------------------------------------------------------
+    const YT_DAILY_UNITS = 10000;          // Google's default daily quota; change if Google raises it
+    const YT_UNITS_PER_SEARCH_TERM = 200;  // rough cost of one search line incl. channel/video lookups
+    DISC.usage = null;                      // { units, searches } for today (US Pacific day), or null if unavailable
+    const ytPacificDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+
+    async function discLoadUsage() {
+      try {
+        const { data, error } = await supabase.from('yt_api_usage').select('day, units, searches').eq('day', ytPacificDay()).maybeSingle();
+        if (error) { DISC.usage = null; DISC.usageUnavailable = true; return; }
+        DISC.usageUnavailable = false;
+        DISC.usage = { units: data?.units || 0, searches: data?.searches || 0 };
+        if (DISC.usageDay !== ytPacificDay()) { DISC.usageDay = ytPacificDay(); DISC.usageExhausted = false; }
+      } catch { DISC.usage = null; DISC.usageUnavailable = true; }
+      discRenderUsage();
+    }
+
+    async function discFlushUsage() {
+      const units = DISC.pendingUnits || 0, searches = DISC.pendingSearches || 0;
+      if (!units && !searches) return;
+      DISC.pendingUnits = 0; DISC.pendingSearches = 0;
+      try {
+        const { data, error } = await supabase.rpc('yt_usage_add', { p_units: units, p_searches: searches });
+        if (error) throw error;
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row) DISC.usage = { units: row.units || 0, searches: row.searches || 0 };
+        DISC.usageUnavailable = false;
+      } catch {
+        // Table not set up yet: keep a local estimate so the meter still moves for this person
+        if (DISC.usage) DISC.usage = { units: DISC.usage.units + units, searches: DISC.usage.searches + searches };
+      }
+      discRenderUsage();
+    }
+
+    function discRenderUsage() {
+      const host = document.getElementById('disc-usage');
+      if (!host) return;
+      if (!DISC.usage && !DISC.usageExhausted) {
+        host.innerHTML = DISC.usageUnavailable
+          ? '<span class="text-xs text-stone-400">Daily usage meter is not set up yet (needs the yt_api_usage table in Supabase).</span>' : '';
+        return;
+      }
+      const units = DISC.usage?.units || 0;
+      const pct = DISC.usageExhausted ? 100 : Math.min(100, Math.round(100 * units / YT_DAILY_UNITS));
+      const left = DISC.usageExhausted ? 0 : Math.max(0, Math.floor((YT_DAILY_UNITS - units) / YT_UNITS_PER_SEARCH_TERM));
+      const color = pct >= 90 ? '#dc2626' : pct >= 60 ? '#d97706' : '#059669';
+      const headline = DISC.usageExhausted
+        ? `Limit reached for today. Searching opens again at ${ytResetText()}.`
+        : `${pct}% of today’s team limit used · about ${left} more search line${left === 1 ? '' : 's'} left`;
+      host.innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span class="font-medium" style="color:${color}">${escape(headline)}</span>
+          <span class="text-stone-400">${ytNum(DISC.usage?.searches || 0)} searches today · resets ${escape(ytResetText())}</span>
+        </div>
+        <div class="h-2 bg-stone-100 rounded mt-1.5 overflow-hidden">
+          <div class="h-full rounded" style="width:${pct}%; background:${color}"></div>
+        </div>`;
+    }
+
     async function fetchDiscover() {
       if (!DISC.crmKeys) await loadDiscoverCrm();
+      await discLoadUsage();
     }
 
     function discSetStatus(msg, isErr = false) {
@@ -3637,6 +3718,7 @@
             if (!pageToken || !(data.items || []).length) break;
           }
           discSetProgress(5 + 20 * (t + 1) / terms.length);
+          discFlushUsage();
         }
 
         // 2. Channel details (50 per call)
@@ -3799,6 +3881,7 @@
       } catch (e) {
         discSetStatus(e.message, true);
       } finally {
+        await discFlushUsage();
         DISC.running = false;
         discSyncControls();
         discRenderResults();
@@ -3995,6 +4078,7 @@
         onkeydown: (e) => { if (e.key === 'Enter' && !DISC.running) discRunSentence(sentenceInp.value); } });
       const plan = DISC.lastPlan;
       const sentenceCard = el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4 mb-4' },
+        el('div', { id: 'disc-usage', class: 'mb-4' }),
         el('div', { class: 'text-sm font-medium text-stone-800 mb-2' }, 'Describe who you’re looking for'),
         el('div', { class: 'flex flex-col sm:flex-row gap-2' },
           sentenceInp,
@@ -4088,7 +4172,7 @@
         ytHasBuiltInKey() ? null : keyCard, sentenceCard, searchCard, toolbar, results
       );
       // Fill the table and button states once the page is in the DOM
-      setTimeout(() => { discRenderResults(); discSyncControls(); }, 0);
+      setTimeout(() => { discRenderResults(); discSyncControls(); discRenderUsage(); }, 0);
       return page;
     }
 
