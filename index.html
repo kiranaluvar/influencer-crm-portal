@@ -72,7 +72,7 @@
     const ALLOWED_DOMAIN = 'brightchamps.com';
     // YouTube Data API key for the YouTube Discovery page. Paste the key between the quotes.
     // Keep it restricted in Google Cloud to https://kiranaluvar.github.io/* and to YouTube Data API v3 only.
-    const YT_API_KEY = 'AIzaSyB_REs0bLElYFZLLy4oUJipnvxT3NIg9bs';
+    const YT_API_KEY = 'PASTE_YOUTUBE_API_KEY_HERE';
     const PAGE_SIZE = 25;
 
     const LANGUAGES = ['Hindi','English','Tamil','Telugu','Kannada','Malayalam','Marathi','Gujarati','Bengali','Punjabi','Urdu'];
@@ -3134,7 +3134,9 @@
     // ===============================================================
     const YT_API = 'https://www.googleapis.com/youtube/v3/';
     const YT_KEY_LS = 'bc_yt_api_key';
-    const YT_COUNTRY_NAMES = { IN: 'India', US: 'United States', GB: 'United Kingdom', AE: 'United Arab Emirates', CA: 'Canada', AU: 'Australia', SG: 'Singapore', SA: 'Saudi Arabia', QA: 'Qatar', NZ: 'New Zealand', MY: 'Malaysia', NP: 'Nepal', LK: 'Sri Lanka', BD: 'Bangladesh', PK: 'Pakistan' };
+    const YT_COUNTRY_NAMES = { IN: 'India', US: 'United States', GB: 'United Kingdom', AE: 'United Arab Emirates', CA: 'Canada', AU: 'Australia', SG: 'Singapore', SA: 'Saudi Arabia', QA: 'Qatar', NZ: 'New Zealand', MY: 'Malaysia', NP: 'Nepal', LK: 'Sri Lanka', BD: 'Bangladesh', PK: 'Pakistan',
+      ID: 'Indonesia', PH: 'Philippines', TH: 'Thailand', VN: 'Vietnam', JP: 'Japan', KR: 'South Korea', DE: 'Germany', FR: 'France', ES: 'Spain', IT: 'Italy', NL: 'Netherlands', BR: 'Brazil', MX: 'Mexico',
+      ZA: 'South Africa', NG: 'Nigeria', KE: 'Kenya', TR: 'Turkey', IE: 'Ireland', KW: 'Kuwait', OM: 'Oman', BH: 'Bahrain', EG: 'Egypt' };
     const DISC = {
       form: {
         terms: 'mom vlog india\nparenting india\nkids activities hindi',
@@ -3289,7 +3291,7 @@
       return { genre: top, also };
     }
 
-    const DISC_LANG_NAMES = { hi: 'Hindi', en: 'English', ta: 'Tamil', te: 'Telugu', kn: 'Kannada', ml: 'Malayalam', mr: 'Marathi', bn: 'Bengali', gu: 'Gujarati', pa: 'Punjabi', ur: 'Urdu', or: 'Odia', as: 'Assamese', ar: 'Arabic', es: 'Spanish', fr: 'French' };
+    const DISC_LANG_NAMES = { hi: 'Hindi', en: 'English', ta: 'Tamil', te: 'Telugu', kn: 'Kannada', ml: 'Malayalam', mr: 'Marathi', bn: 'Bengali', gu: 'Gujarati', pa: 'Punjabi', ur: 'Urdu', or: 'Odia', as: 'Assamese', ar: 'Arabic', es: 'Spanish', fr: 'French', id: 'Indonesian', ms: 'Malay', tl: 'Filipino', th: 'Thai', vi: 'Vietnamese', ja: 'Japanese', ko: 'Korean', ne: 'Nepali', de: 'German', it: 'Italian', nl: 'Dutch', pt: 'Portuguese', tr: 'Turkish' };
     const discLangName = (code) => {
       const c = String(code || '').toLowerCase().split('-')[0];
       return c && c !== 'zxx' && c !== 'und' ? (DISC_LANG_NAMES[c] || c.toUpperCase()) : '';
@@ -3407,20 +3409,46 @@
       gu: ['gujarati mummy vlog'],
       pa: ['punjabi mummy vlog'],
     };
+    // lang = main local language (used for YouTube's language preference when no language is given)
+    // native = local-language phrases for family / parenting creators
     const DISC_NL_COUNTRIES = [
-      { code: 'IN', label: 'India',          word: 'india',     words: ['india', 'indian'] },
+      { code: 'IN', label: 'India',          word: 'india',     words: ['india'] },
       { code: 'US', label: 'United States',  word: 'usa',       words: ['usa', 'america', 'american', 'united states', 'in us', 'the us', 'u s a'] },
       { code: 'GB', label: 'United Kingdom', word: 'uk',        words: ['uk', 'united kingdom', 'britain', 'british'] },
       { code: 'CA', label: 'Canada',         word: 'canada',    words: ['canada', 'canadian'] },
       { code: 'AU', label: 'Australia',      word: 'australia', words: ['australia', 'australian'] },
-      { code: 'AE', label: 'UAE',            word: 'dubai',     words: ['uae', 'emirates'] },
-      { code: 'SG', label: 'Singapore',      word: 'singapore', words: ['singapore'] },
-      { code: 'MY', label: 'Malaysia',       word: 'malaysia',  words: ['malaysia'] },
-      { code: 'SA', label: 'Saudi Arabia',   word: 'saudi',     words: ['saudi', 'saudi arabia'] },
-      { code: 'QA', label: 'Qatar',          word: 'qatar',     words: ['qatar'] },
-      { code: 'NZ', label: 'New Zealand',    word: 'new zealand', words: ['new zealand'] },
-      { code: 'DE', label: 'Germany',        word: 'germany',   words: ['germany'] },
-      { code: 'LK', label: 'Sri Lanka',      word: 'sri lanka', words: ['sri lanka', 'srilanka'] },
+      { code: 'NZ', label: 'New Zealand',    word: 'new zealand', words: ['new zealand', 'kiwi'] },
+      { code: 'IE', label: 'Ireland',        word: 'ireland',   words: ['ireland', 'irish'] },
+      { code: 'AE', label: 'UAE',            word: 'dubai',     words: ['uae', 'emirates'], lang: 'ar' },
+      { code: 'SA', label: 'Saudi Arabia',   word: 'saudi',     words: ['saudi', 'saudi arabia'], lang: 'ar' },
+      { code: 'QA', label: 'Qatar',          word: 'qatar',     words: ['qatar'], lang: 'ar' },
+      { code: 'KW', label: 'Kuwait',         word: 'kuwait',    words: ['kuwait'], lang: 'ar' },
+      { code: 'OM', label: 'Oman',           word: 'oman',      words: ['oman', 'muscat'], lang: 'ar' },
+      { code: 'BH', label: 'Bahrain',        word: 'bahrain',   words: ['bahrain'], lang: 'ar' },
+      { code: 'EG', label: 'Egypt',          word: 'egypt',     words: ['egypt', 'egyptian'], lang: 'ar', native: ['فلوج عائلي', 'يوميات أم'] },
+      { code: 'SG', label: 'Singapore',      word: 'singapore', words: ['singapore', 'singaporean'] },
+      { code: 'MY', label: 'Malaysia',       word: 'malaysia',  words: ['malaysia', 'malaysian'], lang: 'ms', native: ['vlog keluarga malaysia', 'ibu muda malaysia', 'parenting malaysia'] },
+      { code: 'ID', label: 'Indonesia',      word: 'indonesia', words: ['indonesia', 'indonesian', 'jakarta', 'bali', 'surabaya', 'bandung'], lang: 'id', native: ['vlog keluarga', 'vlog ibu rumah tangga', 'parenting anak', 'kehidupan ibu muda', 'vlog anak'] },
+      { code: 'PH', label: 'Philippines',    word: 'philippines', words: ['philippines', 'filipino', 'filipina', 'pinoy', 'pinay', 'manila'], lang: 'tl', native: ['pinoy family vlog', 'pinay mom vlog', 'filipino family vlog'] },
+      { code: 'TH', label: 'Thailand',       word: 'thailand',  words: ['thailand', 'thai', 'bangkok'], lang: 'th', native: ['ครอบครัว vlog', 'เลี้ยงลูก'] },
+      { code: 'VN', label: 'Vietnam',        word: 'vietnam',   words: ['vietnam', 'vietnamese', 'hanoi'], lang: 'vi', native: ['vlog gia đình', 'mẹ bỉm sữa'] },
+      { code: 'JP', label: 'Japan',          word: 'japan',     words: ['japan', 'japanese', 'tokyo'], lang: 'ja', native: ['子育て vlog', '家族 vlog'] },
+      { code: 'KR', label: 'South Korea',    word: 'korea',     words: ['korea', 'korean', 'seoul'], lang: 'ko', native: ['육아 브이로그', '가족 브이로그'] },
+      { code: 'NP', label: 'Nepal',          word: 'nepal',     words: ['nepal', 'nepali', 'kathmandu'], lang: 'ne', native: ['nepali family vlog', 'nepali mom vlog'] },
+      { code: 'BD', label: 'Bangladesh',     word: 'bangladesh', words: ['bangladesh', 'bangladeshi', 'dhaka'], lang: 'bn', native: ['bangladeshi family vlog', 'bangla mom vlog'] },
+      { code: 'PK', label: 'Pakistan',       word: 'pakistan',  words: ['pakistan', 'pakistani', 'karachi', 'lahore'], lang: 'ur', native: ['pakistani family vlog', 'pakistani mom vlog'] },
+      { code: 'LK', label: 'Sri Lanka',      word: 'sri lanka', words: ['sri lanka', 'srilanka', 'sri lankan'], native: ['sri lankan family vlog'] },
+      { code: 'DE', label: 'Germany',        word: 'germany',   words: ['germany', 'german'], lang: 'de', native: ['familien vlog', 'mama vlog'] },
+      { code: 'FR', label: 'France',         word: 'france',    words: ['france', 'french', 'paris'], lang: 'fr', native: ['vlog famille', 'vlog maman'] },
+      { code: 'ES', label: 'Spain',          word: 'spain',     words: ['spain', 'spanish', 'madrid'], lang: 'es', native: ['vlog familiar', 'vlog de mamá'] },
+      { code: 'IT', label: 'Italy',          word: 'italy',     words: ['italy', 'italian'], lang: 'it', native: ['vlog famiglia', 'vlog mamma'] },
+      { code: 'NL', label: 'Netherlands',    word: 'netherlands', words: ['netherlands', 'dutch', 'holland', 'amsterdam'], lang: 'nl', native: ['familie vlog', 'mama vlog'] },
+      { code: 'BR', label: 'Brazil',         word: 'brazil',    words: ['brazil', 'brazilian', 'brasil'], lang: 'pt', native: ['vlog de família', 'vlog de mãe', 'rotina de mãe'] },
+      { code: 'MX', label: 'Mexico',         word: 'mexico',    words: ['mexico', 'mexican'], lang: 'es', native: ['vlog familiar mexico', 'vlog de mamá mexicana'] },
+      { code: 'ZA', label: 'South Africa',   word: 'south africa', words: ['south africa', 'south african', 'johannesburg', 'cape town'] },
+      { code: 'NG', label: 'Nigeria',        word: 'nigeria',   words: ['nigeria', 'nigerian', 'lagos'] },
+      { code: 'KE', label: 'Kenya',          word: 'kenya',     words: ['kenya', 'kenyan', 'nairobi'] },
+      { code: 'TR', label: 'Turkey',         word: 'turkey',    words: ['turkey', 'turkish', 'istanbul'], lang: 'tr', native: ['aile vlog', 'anne vlog'] },
     ];
     // States and cities. c = country code, t = 'state' | 'city'.
     // langState: the state name already implies the language (Tamil Nadu -> Tamil), so it is not added to searches.
@@ -3534,7 +3562,9 @@
       // Word to add into searches: the city/state (unless it only implies the language), else a foreign country
       const locWord = place && !place.langState ? place.label.toLowerCase()
         : (abroad ? abroad.word : null);
-      const L = lang ? lang.name : (abroad ? 'indian' : 'india');
+      // Does the person want Indian / desi creators? (only then do we use "indian", "desi", "nri" words)
+      const wantIndian = !!lang || has('indian') || has('desi') || has('nri') || (country && country.code === 'IN');
+      const L = lang ? lang.name : (wantIndian ? (abroad ? 'indian' : 'india') : (country ? country.word : ''));
       let terms = [];
       if (picked.length) {
         const parenting = picked.find(t => t.genre === 'Parenting');
@@ -3557,7 +3587,13 @@
         const W = locWord;
         const base = terms.filter(t => !(lang && DISC_NL_LOCAL_PARENTING[lang.code]?.includes(t))).slice(0, 5).map(t => `${t} ${W}`);
         const isParenting = picked.some(t => t.genre === 'Parenting');
-        if (abroad && !lang) {
+        if (abroad && !lang && !wantIndian) {
+          // Local creators of that country/place (e.g. "creators in Indonesia"): use the place name + local-language phrases
+          const native = (abroad.native || []);
+          terms = isParenting
+            ? [...native.slice(0, 4), `${W} mom vlog`, `${W} family vlog`, `mom life in ${W}`, `${W} parenting`, `family vlog ${W}`]
+            : picked.flatMap(t => t.terms.slice(0, 3)).map(t => t.replace('{L}', W));   // local phrases are parenting-specific
+        } else if (abroad && !lang) {
           // "Indian creators in Texas": Indians abroad usually say desi / NRI
           terms = isParenting
             ? [`indian family in ${W}`, `desi mom in ${W}`, `nri family vlog ${W}`, `indian mom vlog ${W}`, `desi family vlog ${W}`, `nri life in ${W}`, `indian kids ${W}`, `desi parenting ${W}`]
@@ -3578,7 +3614,8 @@
         // For a country, a mention of any of its states/cities also counts (e.g. "usa" matches a channel saying "Texas")
         locWords: place && !place.langState ? place.words
           : (abroad ? [...abroad.words, ...DISC_NL_PLACES.filter(p => p.c === abroad.code).flatMap(p => p.words)] : []),
-        wantIndian: !!abroad && (!!lang || has('indian') || has('india') || has('desi') || has('nri')),
+        wantIndian: !!abroad && !!(lang || has('indian') || has('desi') || has('nri')),
+        countryLang: abroad && !lang && !(has('indian') || has('desi') || has('nri')) ? (abroad.lang || '') : '',
         lang: lang ? lang.code : '',
         langName: lang ? lang.name.charAt(0).toUpperCase() + lang.name.slice(1) : '',
         genre: picked[0]?.genre || '',
@@ -3595,7 +3632,7 @@
       f.sentence = text;
       f.terms = q.terms.join('\n');
       f.region = q.region;       // no region filter unless a country is mentioned
-      f.lang = q.lang;
+      f.lang = q.lang || q.countryLang;   // e.g. Indonesia -> Indonesian when no language was given
       f.location = q.placeLabel || (q.region && q.region !== 'IN' ? q.countryLabel : '');
       f.locWords = q.locWords;
       if (q.minSubs != null) f.minSubs = String(Math.round(q.minSubs));
@@ -4121,7 +4158,9 @@
         el('div', { class: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3' },
           labelEl('Advanced: search terms (one per line, each is a separate search)', termsBox, 'sm:col-span-2'),
           labelEl('Region', mkSelect('region', [['', 'Any (no region filter)'], ...DISC_NL_COUNTRIES.map(c => [c.code, c.label])])),
-          labelEl('Language', mkSelect('lang', [['', 'Any'], ['en', 'English'], ['hi', 'Hindi'], ['ta', 'Tamil'], ['te', 'Telugu'], ['kn', 'Kannada'], ['ml', 'Malayalam'], ['mr', 'Marathi'], ['bn', 'Bengali'], ['gu', 'Gujarati'], ['pa', 'Punjabi']])),
+          labelEl('Language', mkSelect('lang', [['', 'Any'], ['en', 'English'], ['hi', 'Hindi'], ['ta', 'Tamil'], ['te', 'Telugu'], ['kn', 'Kannada'], ['ml', 'Malayalam'], ['mr', 'Marathi'], ['bn', 'Bengali'], ['gu', 'Gujarati'], ['pa', 'Punjabi'], ['ur', 'Urdu'], ['ne', 'Nepali'],
+            ['id', 'Indonesian'], ['ms', 'Malay'], ['tl', 'Filipino'], ['th', 'Thai'], ['vi', 'Vietnamese'], ['ja', 'Japanese'], ['ko', 'Korean'],
+            ['ar', 'Arabic'], ['es', 'Spanish'], ['pt', 'Portuguese'], ['fr', 'French'], ['de', 'German'], ['it', 'Italian'], ['nl', 'Dutch'], ['tr', 'Turkish']])),
           labelEl('Channels per search term', mkSelect('perTerm', [['10', '10'], ['20', '20'], ['25', '25'], ['50', '50'], ['100', '100'], ['150', '150']])),
           labelEl('Min subscribers', bind('minSubs', el('input', { type: 'number', min: '0', value: f.minSubs, class: inputCls }))),
           labelEl('Max subscribers (blank = no limit)', bind('maxSubs', el('input', { type: 'number', min: '0', value: f.maxSubs, placeholder: 'e.g. 500000', class: inputCls }))),
