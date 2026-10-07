@@ -3450,6 +3450,12 @@
       { code: 'KE', label: 'Kenya',          word: 'kenya',     words: ['kenya', 'kenyan', 'nairobi'] },
       { code: 'TR', label: 'Turkey',         word: 'turkey',    words: ['turkey', 'turkish', 'istanbul'], lang: 'tr', native: ['aile vlog', 'anne vlog'] },
     ];
+    // Cities/states where most Indian families abroad live; used to widen diaspora searches.
+    const DISC_DIASPORA_HUBS = {
+      US: ['new jersey', 'texas', 'bay area', 'chicago'], GB: ['london', 'leicester', 'birmingham'], CA: ['toronto', 'brampton'],
+      AU: ['sydney', 'melbourne'], NZ: ['auckland'], AE: ['dubai', 'abu dhabi'], SA: ['riyadh', 'jeddah'], QA: ['doha'],
+      SG: [], MY: ['kuala lumpur'], DE: ['berlin', 'munich'], IE: ['dublin'], KW: [], OM: ['muscat'],
+    };
     // States and cities. c = country code, t = 'state' | 'city'.
     // langState: the state name already implies the language (Tamil Nadu -> Tamil), so it is not added to searches.
     const DISC_NL_PLACES = (() => {
@@ -3593,16 +3599,20 @@
           terms = isParenting
             ? [...native.slice(0, 4), `${W} mom vlog`, `${W} family vlog`, `mom life in ${W}`, `${W} parenting`, `family vlog ${W}`]
             : picked.flatMap(t => t.terms.slice(0, 3)).map(t => t.replace('{L}', W));   // local phrases are parenting-specific
-        } else if (abroad && !lang) {
-          // "Indian creators in Texas": Indians abroad usually say desi / NRI
-          terms = isParenting
-            ? [`indian family in ${W}`, `desi mom in ${W}`, `nri family vlog ${W}`, `indian mom vlog ${W}`, `desi family vlog ${W}`, `nri life in ${W}`, `indian kids ${W}`, `desi parenting ${W}`]
-            : [`indian in ${W}`, `desi vlog ${W}`, `nri life in ${W}`, ...base.map(t => t.replace(/^indian /, 'desi '))];
         } else {
-          const extra = isParenting
-            ? [`${L} family in ${W}`, `${L} mom in ${W}`, `${L} vlog ${W} life`]
-            : [`${L} in ${W}`, `${L} vlog ${W}`];
-          terms = [...extra, ...base];
+          // Indians abroad ("tamil families in uk", "indian moms in usa").
+          // Diaspora creators title videos like "UK Tamil vlog", "Life in UK", "Tamil family in London",
+          // so put the place first/last in natural phrases and add the main diaspora cities when only a country was given.
+          const P = lang ? L : 'indian';
+          const hubs = !place && abroad ? (DISC_DIASPORA_HUBS[abroad.code] || []) : [];   // only when just a country was given
+          terms = isParenting
+            ? [`${P} family in ${W}`, `${W} ${P} vlog`, `${P} mom in ${W}`, `life in ${W} ${P}`, `${P} family vlog ${W}`,
+               ...(lang ? [`${P} couple in ${W}`] : [`desi mom in ${W}`, `nri family vlog ${W}`]),
+               ...hubs.slice(0, 2).map(h => `${P} family in ${h}`), `${W} ${P} kids`]
+            : [`${P} in ${W}`, `${W} ${P} vlog`, `life in ${W} ${P}`, `${P} vlog ${W}`,
+               ...picked.flatMap(t => t.terms.slice(0, 2)).map(t => `${t.replace('{L}', P)} ${W}`),
+               ...hubs.slice(0, 1).map(h => `${P} vlog ${h}`)];
+          if (!lang && !isParenting) terms.push(`desi vlog ${W}`, `nri life in ${W}`);
         }
       }
       terms = [...new Set(terms.map(t => t.replace(/\s+/g, ' ').trim()))].slice(0, 8);
@@ -3636,6 +3646,7 @@
       f.location = q.placeLabel || (q.region && q.region !== 'IN' ? q.countryLabel : '');
       f.locWords = q.locWords;
       if (q.minSubs != null) f.minSubs = String(Math.round(q.minSubs));
+      else if (q.wantIndian && q.region && q.region !== 'IN') f.minSubs = '1000';   // diaspora creators are often small; don't cut them at 5,000
       if (q.maxSubs != null) f.maxSubs = String(Math.round(q.maxSubs));
       DISC.genre = q.genre;
       DISC.lastPlan = q;
