@@ -3142,6 +3142,8 @@
         terms: 'mom vlog india\nparenting india\nkids activities hindi',
         region: '', lang: '', perTerm: '50', minSubs: '5000', maxSubs: '', activeDays: '90',
         longOnly: true, countryOnly: false, location: '', locWords: null,
+        searchType: 'video',      // 'video' finds creators through their video titles (much wider than channel-name search)
+        importText: '',
       },
       results: [], running: false, stop: false, quota: 0,
       status: '', statusErr: false, progress: 0,
@@ -3217,11 +3219,11 @@
       } catch { /* storage full or blocked: skip caching */ }
     }
     async function ytSearchCached(params) {
-      const key = JSON.stringify([params.q.toLowerCase().trim(), params.regionCode || '', params.relevanceLanguage || '', params.maxResults, params.pageToken || '']);
+      const key = JSON.stringify([params.type, params.q.toLowerCase().trim(), params.regionCode || '', params.relevanceLanguage || '', params.maxResults, params.pageToken || '']);
       const cached = ytCacheGet(key);
       if (cached) { DISC.cacheHits = (DISC.cacheHits || 0) + 1; return cached; }
       const slim = await ytCall('search', params, 100);
-      const data = { items: (slim.items || []).map(it => ({ id: { channelId: it.id?.channelId }, snippet: { channelId: it.snippet?.channelId } })), nextPageToken: slim.nextPageToken || '' };
+      const data = { items: (slim.items || []).map(it => ({ id: { channelId: it.id?.channelId }, snippet: { channelId: it.snippet?.channelId || it.id?.channelId } })), nextPageToken: slim.nextPageToken || '' };
       ytCacheSet(key, data);
       return data;
     }
@@ -3648,7 +3650,8 @@
       if (q.minSubs != null) f.minSubs = String(Math.round(q.minSubs));
       else if (q.wantIndian && q.region && q.region !== 'IN') f.minSubs = '1000';   // diaspora creators are often small; don't cut them at 5,000
       if (q.maxSubs != null) f.maxSubs = String(Math.round(q.maxSubs));
-      DISC.genre = q.genre;
+      DISC.genre = q.region && q.region !== 'IN' ? '' : q.genre;   // creators abroad are often tagged Lifestyle / Family, so don't filter by genre
+      f.searchType = f.searchType || 'video';
       DISC.lastPlan = q;
       DISC.indianOnly = q.wantIndian;   // abroad + Indian: hide non-Indian creators by default
       DISC.basedOnly = !!(q.region && q.region !== 'IN');  // "in usa" means they live there, not just popular there
@@ -3741,16 +3744,32 @@
       if (csv) csv.disabled = !DISC.results.length;
     }
 
-    async function runDiscover() {
+    // Parse pasted channel links / @handles / channel IDs
+    function discParseImport(text) {
+      const ids = new Set(), handles = new Set();
+      String(text || '').split(/[\s,;]+/).map(x => x.trim()).filter(Boolean).forEach(x => {
+        const id = /(UC[\w-]{22})/.exec(x);
+        if (id) { ids.add(id[1]); return; }
+        const h = /youtube\.com\/@([^/?#\s]+)/i.exec(x) || /^@([\w.\-]+)$/.exec(x);
+        if (h) handles.add('@' + decodeURIComponent(h[1]));
+      });
+      return { ids: [...ids], handles: [...handles] };
+    }
+
+    async function runDiscover(opts = {}) {
       if (DISC.running) return;
       if (!ytGetKey()) return discSetStatus('The YouTube API key is not set up yet. Ask an admin to add it to the CRM code (YT_API_KEY).', true);
       const f = DISC.form;
-      const terms = f.terms.split('\n').map(s => s.trim()).filter(Boolean);
-      if (!terms.length) return discSetStatus('Enter at least one search term.', true);
+      const importing = !!opts.import;
+      const terms = importing ? [] : f.terms.split('\n').map(s => s.trim()).filter(Boolean);
+      if (!importing && !terms.length) return discSetStatus('Enter at least one search term.', true);
+      const imp = importing ? discParseImport(f.importText) : null;
+      if (importing && !imp.ids.length && !imp.handles.length) return discSetStatus('Paste YouTube channel links or @handles, one per line.', true);
       const perTerm = +f.perTerm || 50;
-      const minSubs = +f.minSubs || 0;
-      const maxSubs = f.maxSubs ? +f.maxSubs : Infinity;
-      const activeDays = +f.activeDays || 0;
+      // Imported channels are ones you already chose, so the size / activity filters don't apply
+      const minSubs = importing ? 0 : (+f.minSubs || 0);
+      const maxSubs = importing ? Infinity : (f.maxSubs ? +f.maxSubs : Infinity);
+      const activeDays = importing ? 0 : (+f.activeDays || 0);
 
       DISC.running = true; DISC.stop = false; DISC.quota = 0; DISC.results = []; DISC.cacheHits = 0;
       discSyncControls(); discRenderResults(); discSetProgress(2);
@@ -3758,29 +3777,49 @@
       try {
         if (!DISC.crmKeys) await loadDiscoverCrm();
 
-        // 1. Search channels for each term
         const found = new Map();
-        for (let t = 0; t < terms.length && !DISC.stop; t++) {
-          let pageToken = '', got = 0;
-          while (got < perTerm && !DISC.stop) {
-            discSetStatus(`Searching “${terms[t]}”… (${found.size} channels so far)`);
-            const params = { part: 'snippet', type: 'channel', q: terms[t], maxResults: Math.min(50, perTerm - got) };
-            if (f.region) params.regionCode = f.region;
-            if (f.lang) params.relevanceLanguage = f.lang;
-            if (pageToken) params.pageToken = pageToken;
-            const data = await ytSearchCached(params);
-            for (const it of data.items || []) {
-              const id = it.snippet?.channelId || it.id?.channelId;
-              if (!id) continue;
-              if (!found.has(id)) found.set(id, new Set());
-              found.get(id).add(terms[t]);
-            }
-            got += (data.items || []).length;
-            pageToken = data.nextPageToken;
-            if (!pageToken || !(data.items || []).length) break;
+        if (importing) {
+          // 1a. Pasted list: resolve @handles to channel IDs (1 unit each)
+          imp.ids.forEach(id => found.set(id, new Set(['pasted list'])));
+          for (let i = 0; i < imp.handles.length && !DISC.stop; i++) {
+            discSetStatus(`Looking up ${imp.handles[i]}… (${i + 1} / ${imp.handles.length})`);
+            try {
+              const d = await ytCall('channels', { part: 'id', forHandle: imp.handles[i] }, 1);
+              const id = d.items?.[0]?.id;
+              if (id) found.set(id, new Set(['pasted list']));
+            } catch (e) { if (e.fatal) throw e; }
+            discSetProgress(5 + 20 * (i + 1) / imp.handles.length);
           }
-          discSetProgress(5 + 20 * (t + 1) / terms.length);
-          discFlushUsage();
+        } else {
+          // 1b. Search each term. Video search finds creators through what their videos are about;
+          // channel search only matches words in channel names.
+          const types = f.searchType === 'both' ? ['video', 'channel'] : [f.searchType === 'channel' ? 'channel' : 'video'];
+          const steps = terms.length * types.length; let step = 0;
+          for (let t = 0; t < terms.length && !DISC.stop; t++) {
+            for (const type of types) {
+              let pageToken = '', got = 0;
+              while (got < perTerm && !DISC.stop) {
+                discSetStatus(`Searching ${type === 'video' ? 'videos' : 'channel names'} for “${terms[t]}”… (${found.size} channels so far)`);
+                const params = { part: 'snippet', type, q: terms[t], maxResults: Math.min(50, perTerm - got) };
+                if (f.region) params.regionCode = f.region;
+                if (f.lang) params.relevanceLanguage = f.lang;
+                if (pageToken) params.pageToken = pageToken;
+                const data = await ytSearchCached(params);
+                for (const it of data.items || []) {
+                  const id = it.snippet?.channelId || it.id?.channelId;
+                  if (!id) continue;
+                  if (!found.has(id)) found.set(id, new Set());
+                  found.get(id).add(terms[t]);
+                }
+                got += (data.items || []).length;
+                pageToken = data.nextPageToken;
+                if (!pageToken || !(data.items || []).length) break;
+              }
+              step++;
+              discSetProgress(5 + 20 * step / steps);
+            }
+            discFlushUsage();
+          }
         }
 
         // 2. Channel details (50 per call)
@@ -3796,7 +3835,7 @@
           const subs = +c.statistics?.subscriberCount || 0;
           if (c.statistics?.hiddenSubscriberCount) return minSubs === 0;
           if (subs < minSubs || subs > maxSubs) return false;
-          if (f.countryOnly && f.region && (c.snippet?.country || '') !== f.region) return false;
+          if (!importing && f.countryOnly && f.region && (c.snippet?.country || '') !== f.region) return false;
           return true;
         });
 
@@ -3830,7 +3869,9 @@
             const lastUpload = videos[0]?.published || null;
             if (cutoff && (!lastUpload || new Date(lastUpload).getTime() < cutoff)) return;
 
-            const recent = (f.longOnly ? videos.filter(v => v.secs > 180) : videos).slice(0, 7);
+            const longVids = f.longOnly ? videos.filter(v => v.secs > 180) : videos;
+            const shortsFallback = f.longOnly && !longVids.length && videos.length > 0;   // channel posts only Shorts
+            const recent = (shortsFallback ? videos : longVids).slice(0, 7);
             const last3 = recent.slice(0, 3);
             const avgOf = (arr) => arr.length ? Math.round(arr.reduce((a, v) => a + v.views, 0) / arr.length) : null;
             const v7 = recent.reduce((a, v) => a + v.views, 0);
@@ -3916,6 +3957,7 @@
               lastUpload,
               terms: [...(found.get(c.id) || [])],
               crmProfileId: null,
+              shortsFallback,
               locHit, locLabel: f.location || '',
               indian: ind.indian, indianWhy: ind.reasons.join('; '),
               median7, spiky, avgLikes, avgComments, avgLenSecs, uploadsPerMonth, language, madeForKids,
@@ -3950,21 +3992,42 @@
       }
     }
 
+    // Why is a channel hidden? Returns a short reason key, or '' if it is shown.
+    function discHideReason(r, q = DISC.filter.trim().toLowerCase()) {
+      if (DISC.basedOnly) { const b = discBased(r); if (b === 'no' || b === 'unknown') return 'based'; }
+      if (DISC.indianOnly && !r.indian) return 'indian';
+      if (DISC.genre === '__none' && r.genre) return 'genre';
+      if (DISC.genre && DISC.genre !== '__none' && r.genre !== DISC.genre && !r.genreAlso.includes(DISC.genre)) return 'genre';
+      if (DISC.hideKids && r.madeForKids) return 'kids';
+      if (DISC.hideCrm && r.crmProfileId) return 'crm';
+      if (DISC.emailOnly && !r.emails.length) return 'email';
+      if (DISC.locOnly && r.locHit === false) return 'loc';
+      if (q && !(`${r.title} ${r.handle} ${r.description}`.toLowerCase().includes(q))) return 'text';
+      return '';
+    }
+
+    function discHiddenSummary(shown) {
+      const counts = {};
+      DISC.results.forEach(r => { const k = discHideReason(r); if (k) counts[k] = (counts[k] || 0) + 1; });
+      const region = discCountryName(DISC.form.region);
+      const labels = {
+        based: `not based in ${region || 'the region'}`, indian: 'not Indian creators', genre: `genre isn't ${DISC.genre === '__none' ? 'blank' : DISC.genre}`,
+        kids: 'made for kids', crm: 'already in CRM', email: 'no email', loc: 'don’t mention the location', text: 'don’t match the filter text',
+      };
+      const parts = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n} ${labels[k]}`);
+      let tip = '';
+      if (DISC.results.length && shown < 5) {
+        if (+DISC.form.perTerm < 25) tip = 'Tip: set “Channels per search term” to 50. It costs about the same and finds up to 5× more channels.';
+        else if (DISC.genre && counts.genre) tip = 'Tip: set the genre filter to “All genres”. Families abroad are often tagged Lifestyle or Travel.';
+        else if (+DISC.form.minSubs > 1000) tip = 'Tip: lower “Min subscribers”. Many creators abroad are small.';
+      }
+      return { text: parts.length ? `Hidden by filters: ${parts.join(' · ')}` : '', tip };
+    }
+
     function discVisible() {
       const q = DISC.filter.trim().toLowerCase();
       const k = DISC.sortKey, d = DISC.sortDir;
-      return DISC.results.filter(r => {
-        if (DISC.hideCrm && r.crmProfileId) return false;
-        if (DISC.emailOnly && !r.emails.length) return false;
-        if (DISC.locOnly && r.locHit === false) return false;
-        if (DISC.indianOnly && !r.indian) return false;
-        if (DISC.hideKids && r.madeForKids) return false;
-        if (DISC.basedOnly) { const b = discBased(r); if (b === 'no' || b === 'unknown') return false; }
-        if (DISC.genre === '__none' && r.genre) return false;
-        if (DISC.genre && DISC.genre !== '__none' && r.genre !== DISC.genre && !r.genreAlso.includes(DISC.genre)) return false;
-        if (q && !(`${r.title} ${r.handle} ${r.description}`.toLowerCase().includes(q))) return false;
-        return true;
-      }).sort((a, b) => {
+      return DISC.results.filter(r => !discHideReason(r, q)).sort((a, b) => {
         const x = a[k], y = b[k];
         if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
         if (k === 'lastUpload') return d * (new Date(x) - new Date(y));
@@ -4034,6 +4097,11 @@
       const rows = discVisible();
       const countN = document.getElementById('disc-count');
       if (countN) countN.textContent = DISC.results.length ? `${rows.length} of ${DISC.results.length} shown` : '';
+      const hidN = document.getElementById('disc-hidden');
+      if (hidN) {
+        const h = DISC.results.length ? discHiddenSummary(rows.length) : { text: '', tip: '' };
+        hidN.innerHTML = (h.text ? `<div>${escape(h.text)}</div>` : '') + (h.tip ? `<div class="text-amber-700 mt-0.5">${escape(h.tip)}</div>` : '');
+      }
       discSyncControls();
 
       const cols = [
@@ -4091,7 +4159,7 @@
                 : '<span class="text-stone-400 text-xs">Not sure</span>'}</td>
             <td class="px-3 py-2.5 text-right tabular-nums">${r.subs == null ? '<span class="text-stone-400">Hidden</span>' : ytNum(r.subs)}</td>
             <td class="px-3 py-2.5 text-right tabular-nums">${ytNum(r.avg3)}</td>
-            <td class="px-3 py-2.5 text-right tabular-nums">${ytNum(r.avg7)}${r.n7 && r.n7 < 7 ? `<div class="text-[11px] text-stone-400">from ${r.n7} videos</div>` : ''}</td>
+            <td class="px-3 py-2.5 text-right tabular-nums">${ytNum(r.avg7)}${r.shortsFallback ? '<div class="text-[11px] text-amber-700">Shorts only</div>' : (r.n7 && r.n7 < 7 ? `<div class="text-[11px] text-stone-400">from ${r.n7} videos</div>` : '')}</td>
             <td class="px-3 py-2.5 text-right tabular-nums">${ytNum(r.median7)}${r.spiky ? '<div><span class="badge bg-amber-50 text-amber-700 mt-1 whitespace-nowrap" title="One video is pulling the average up; the median is the more realistic number">One video inflating avg</span></div>' : ''}</td>
             <td class="px-3 py-2.5 text-right tabular-nums">${r.viewsToSubs == null ? '—' : `<span class="${r.viewsToSubs >= 20 ? 'text-emerald-700 font-medium' : r.viewsToSubs < 5 ? 'text-rose-600' : ''}">${r.viewsToSubs}%</span>`}</td>
             <td class="px-3 py-2.5 text-right tabular-nums">${r.er7 == null ? '—' : r.er7 + '%'}</td>
@@ -4164,6 +4232,18 @@
           : el('p', { class: 'text-xs text-stone-500 mt-2' }, 'Mention a language or region, the kind of creator, and optionally a size like “under 50k”. Or type your own search terms in the advanced search below.')
       );
 
+      const importBox = bind('importText', el('textarea', { rows: '3', placeholder: 'https://www.youtube.com/@channelname\n@anotherchannel\nhttps://www.youtube.com/channel/UC...', class: inputCls + ' resize-y' }, f.importText || ''));
+      const importCard = el('details', { class: 'bg-white border border-stone-200 rounded-xl p-4 mb-4', ...(f.importText ? { open: true } : {}) },
+        el('summary', { class: 'text-sm font-medium text-stone-800 cursor-pointer' }, 'Already have a list of channels? Paste links to get their stats'),
+        el('p', { class: 'text-xs text-stone-500 mt-2' }, 'Paste channel links or @handles from anywhere (for example YouTube creator partnerships), one per line. Costs 1 unit per channel, almost free.'),
+        importBox,
+        el('div', { class: 'mt-3' },
+          el('button', { class: 'px-3 py-2 text-sm rounded-lg btn-brand', onClick: () => {
+            DISC.genre = ''; DISC.basedOnly = false; DISC.indianOnly = false; DISC.lastPlan = null;
+            runDiscover({ import: true });
+          } }, 'Get stats for these channels'))
+      );
+
       const termsBox = bind('terms', el('textarea', { rows: '3', class: inputCls + ' resize-y' }, f.terms));
       const searchCard = el('div', { class: 'bg-white border border-stone-200 rounded-xl p-4 mb-4' },
         el('div', { class: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3' },
@@ -4172,7 +4252,8 @@
           labelEl('Language', mkSelect('lang', [['', 'Any'], ['en', 'English'], ['hi', 'Hindi'], ['ta', 'Tamil'], ['te', 'Telugu'], ['kn', 'Kannada'], ['ml', 'Malayalam'], ['mr', 'Marathi'], ['bn', 'Bengali'], ['gu', 'Gujarati'], ['pa', 'Punjabi'], ['ur', 'Urdu'], ['ne', 'Nepali'],
             ['id', 'Indonesian'], ['ms', 'Malay'], ['tl', 'Filipino'], ['th', 'Thai'], ['vi', 'Vietnamese'], ['ja', 'Japanese'], ['ko', 'Korean'],
             ['ar', 'Arabic'], ['es', 'Spanish'], ['pt', 'Portuguese'], ['fr', 'French'], ['de', 'German'], ['it', 'Italian'], ['nl', 'Dutch'], ['tr', 'Turkish']])),
-          labelEl('Channels per search term', mkSelect('perTerm', [['10', '10'], ['20', '20'], ['25', '25'], ['50', '50'], ['100', '100'], ['150', '150']])),
+          labelEl('Search in', mkSelect('searchType', [['video', 'Videos (finds the most creators)'], ['channel', 'Channel names only'], ['both', 'Both (uses 2× budget)']])),
+          labelEl('Results per search term', mkSelect('perTerm', [['10', '10'], ['20', '20'], ['25', '25'], ['50', '50'], ['100', '100'], ['150', '150']])),
           labelEl('Min subscribers', bind('minSubs', el('input', { type: 'number', min: '0', value: f.minSubs, class: inputCls }))),
           labelEl('Max subscribers (blank = no limit)', bind('maxSubs', el('input', { type: 'number', min: '0', value: f.maxSubs, placeholder: 'e.g. 500000', class: inputCls }))),
           labelEl('Location the channel mentions (city / state, optional)', (() => {
@@ -4221,6 +4302,7 @@
         el('button', { id: 'disc-csv', class: 'px-3 py-2 text-sm rounded-lg border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-50', onClick: discDownloadCsv }, '⬇ Download CSV')
       );
 
+      const hiddenLine = el('div', { id: 'disc-hidden', class: 'text-xs text-stone-500 -mt-1 mb-3' });
       const results = el('div', { id: 'disc-results' });
       results.addEventListener('click', (e) => {
         const sortTh = e.target.closest('th[data-sort]');
@@ -4245,7 +4327,7 @@
           el('h1', { class: 'text-xl font-semibold text-stone-900 tracking-tight' }, 'YouTube Discovery'),
           el('p', { class: 'text-sm text-stone-500 mt-1' }, 'Search YouTube channels by topic, compare average views on their latest videos, and add the right ones to the CRM.')
         ),
-        ytHasBuiltInKey() ? null : keyCard, sentenceCard, searchCard, toolbar, results
+        ytHasBuiltInKey() ? null : keyCard, sentenceCard, importCard, searchCard, toolbar, hiddenLine, results
       );
       // Fill the table and button states once the page is in the DOM
       setTimeout(() => { discRenderResults(); discSyncControls(); discRenderUsage(); }, 0);
